@@ -109,6 +109,24 @@
     }
   },
   
+  "data_sources": {
+    "ssb_sas_extracts": {
+      "description": "Data hentet fra SSB sine databaser via SAS",
+      "characteristics": [
+        "Kolonnepar: variabel (kode) + variabel_fmt (tekst/navn)",
+        "XML-encoding av spesialtegn og tall (_x0030_ = '0', _x0032_ = '2' osv.)",
+        "STORE BOKSTAVER i noen variabelnavn",
+        "Eksempel: bydel2='030101', bydel2_fmt='Gamle Oslo'"
+      ],
+      "handling": {
+        "code_columns": "Bruk for matching mot kodelister (SSB til PX)",
+        "fmt_columns": "Bruk som fallback-navn hvis kodeliste ikke finnes",
+        "when_codelist_exists": "Bruk kodeliste for både kode-transformasjon OG standardiserte navn",
+        "when_no_codelist": "Behold både kode og _fmt (som _navn)"
+      }
+    }
+  },
+  
   "naming_conventions": {
     "general_rules": [
       "Alle variabelnavn skal være små bokstaver",
@@ -178,9 +196,10 @@
       "notes": "Krever ofte join mellom sysselsettings- og befolkningsdata. Aldersgrupper må være konsistente.",
       "example_tables": ["OK-SYS001", "OK-SYS002", "OK-SYS003"],
       "common_patterns": {
-        "input_columns_to_ignore": ["*_fmt", "kode_kolonner_uten_navn"],
-        "xml_encoding": "Input kan ha XML-encoded verdier (_x0030_ osv.)",
-        "column_case": "Input kan ha STORE BOKSTAVER, skal bli små i output"
+        "fmt_columns": "SAS-uttrekk fra SSB har par av kolonner: 'variabel' (kode) og 'variabel_fmt' (navn/tekst). Begge trengs vanligvis, UNNTATT når kodeliste brukes (da hentes navn fra kodeliste).",
+        "xml_encoding": "Input kan ha XML-encoded verdier (_x0030_ osv.) som må dekodes",
+        "column_case": "Input kan ha STORE BOKSTAVER, skal bli små i output",
+        "code_and_label_pairs": "Typiske par: bydel/bydel_fmt, kjoenn/kjoenn_fmt, aldgr/aldgr_fmt"
       }
     },
     

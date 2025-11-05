@@ -131,7 +131,12 @@ def analyze_training_data():
     # _fmt kolonner
     fmt_columns = [col for col in all_input_columns if col.endswith('_fmt')]
     if fmt_columns:
-        print(f"  📋 _fmt-kolonner: {len(fmt_columns)} stk (formaterte versjoner)")
+        print(f"  📋 _fmt-kolonner: {len(fmt_columns)} stk")
+        print(f"      (SSB SAS-uttrekk: kode + _fmt par. Begge trengs vanligvis)")
+        
+        # Finn tilsvarende kode-kolonner
+        code_cols = [col.replace('_fmt', '') for col in fmt_columns if col.replace('_fmt', '') in all_input_columns]
+        print(f"      Kode+fmt-par funnet: {len(code_cols)}")
     
     # Store bokstaver
     uppercase_cols = [col for col in all_input_columns if col.isupper() or any(c.isupper() for c in col)]
