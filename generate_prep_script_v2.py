@@ -136,6 +136,75 @@ def suggest_geographic_column_name(input_col_name, table_code=None, df_input=Non
     return code_col, label_col, reasoning
 
 
+def find_duplicate_column_variants(column_name, columns):
+    """
+    Finn alle varianter av en kolonne med .1, .2 suffixer.
+    
+    Args:
+        column_name: Base kolonnenavn (f.eks. 'alder')
+        columns: Liste av alle kolonner
+    
+    Returns:
+        list: Alle varianter ['alder', 'alder.1', 'alder.2'] som finnes
+    """
+    variants = []
+    
+    # Sjekk base-navnet
+    if column_name in columns:
+        variants.append(column_name)
+    
+    # Sjekk .1, .2, .3, etc.
+    i = 1
+    while f"{column_name}.{i}" in columns:
+        variants.append(f"{column_name}.{i}")
+        i += 1
+    
+    return variants
+
+
+def resolve_duplicate_mappings(mappings, output_cols):
+    """
+    Løs situasjoner der flere input-kolonner mapper til samme output-kolonne.
+    Prøv å fordele dem på .1, .2 varianter hvis de finnes.
+    
+    Args:
+        mappings: Dict {input_col: output_col}
+        output_cols: Liste av alle output-kolonner
+    
+    Returns:
+        dict: Oppdaterte mappings
+    """
+    # Finn duplikate mappings (flere inputs → samme output)
+    output_usage = {}
+    for in_col, out_col in mappings.items():
+        if out_col not in output_usage:
+            output_usage[out_col] = []
+        output_usage[out_col].append(in_col)
+    
+    # Finn og løs duplikater
+    updated_mappings = mappings.copy()
+    
+    for out_col, in_cols in output_usage.items():
+        if len(in_cols) > 1:
+            # Flere inputs mapper til samme output
+            # Finn alle varianter (.1, .2, etc.)
+            variants = find_duplicate_column_variants(out_col, output_cols)
+            
+            if len(variants) >= len(in_cols):
+                # Vi har nok varianter - fordel mappings
+                # Sorter input-kolonner for konsistens (kode først, så _fmt)
+                in_cols_sorted = sorted(in_cols, key=lambda x: (
+                    '_fmt' in x.lower(),  # _fmt-kolonner sist
+                    x
+                ))
+                
+                for i, in_col in enumerate(in_cols_sorted):
+                    if i < len(variants):
+                        updated_mappings[in_col] = variants[i]
+    
+    return updated_mappings
+
+
 def find_column_mapping_with_codelists(df_input, df_output, codelist_manager, 
                                       kontrollskjema=None, table_code=None, similarity_threshold=0.6):
     """
@@ -212,33 +281,52 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
                 used_output_cols.add(out_col)
                 break
     
-    # 2. Sjekk kodelister for umappede kolonner
+    # 2. Sjekk kodelister for ALLE kolonner (inkludert allerede mappede)
+    # Dette er viktig fordi kolonnenavn kan matche, men verdier trenger transformasjon
+    # Eksempel: bydel2 → bosted (navn matcher via kontrollskjema, men verdier trenger SSB→PX kodeliste)
     for in_col in input_cols:
-        if in_col in mappings:
-            continue
-            
-        in_values = set(df_input[in_col].dropna().astype(str).unique()[:100])
+        # Finn ut-kolonne (enten allerede mappet eller søk)
+        out_col = mappings.get(in_col)
         
-        for out_col in output_cols:
-            if out_col in used_output_cols:
-                continue
-            
+        if out_col:
+            # Allerede mappet - sjekk om verdiene trenger kodeliste-transformasjon
+            in_values = set(df_input[in_col].dropna().astype(str).unique()[:100])
             out_values = set(df_output[out_col].dropna().astype(str).unique()[:100])
             
-            # Finn matching kodeliste
             codelist = codelist_manager.find_matching_codelist(
                 in_col, out_col, in_values, out_values
             )
             
             if codelist:
-                mappings[in_col] = out_col
                 value_transformations[in_col] = {
                     'target_col': out_col,
                     'codelist': codelist['name'],
                     'type': 'codelist_mapping'
                 }
-                used_output_cols.add(out_col)
-                break
+        else:
+            # Ikke mappet ennå - søk etter kodeliste-basert mapping
+            in_values = set(df_input[in_col].dropna().astype(str).unique()[:100])
+            
+            for out_col_candidate in output_cols:
+                if out_col_candidate in used_output_cols:
+                    continue
+                
+                out_values = set(df_output[out_col_candidate].dropna().astype(str).unique()[:100])
+                
+                # Finn matching kodeliste
+                codelist = codelist_manager.find_matching_codelist(
+                    in_col, out_col_candidate, in_values, out_values
+                )
+                
+                if codelist:
+                    mappings[in_col] = out_col_candidate
+                    value_transformations[in_col] = {
+                        'target_col': out_col_candidate,
+                        'codelist': codelist['name'],
+                        'type': 'codelist_mapping'
+                    }
+                    used_output_cols.add(out_col_candidate)
+                    break
     
     # 3. Likhet i kolonnenavn
     for in_col in input_cols:
@@ -283,6 +371,14 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
                         mappings[in_col] = out_col
                         used_output_cols.add(out_col)
                         break
+    
+    # 5. Løs duplikate mappings (flere inputs → samme output)
+    # Dette håndterer situasjoner som: alderu → alder, alderu_fmt → alder
+    # Når output har både 'alder' og 'alder.1'
+    mappings = resolve_duplicate_mappings(mappings, output_cols)
+    
+    # Oppdater used_output_cols basert på nye mappings
+    used_output_cols = set(mappings.values())
     
     unmapped_input = [col for col in input_cols if col not in mappings]
     unmapped_output = [col for col in output_cols if col not in used_output_cols]
