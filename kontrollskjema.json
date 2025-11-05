@@ -3,6 +3,12 @@
   "last_updated": "2025-11-05",
   "description": "Kontrollskjema for standardisering av tabeller i statistikkbanken",
   
+  "purpose": {
+    "primary": "Guide og kvalitetssikring for prep-scripts",
+    "not": "Rigid template som må følges slavisk",
+    "philosophy": "Kontrollskjemaet foreslår standarder basert på treningsdata, men den enkelte tabell må alltid vurderes i sin kontekst. Eksempel: 'bosted' er vanlig for befolkningsdata, men 'bydel' kan være mer presist når data aggregeres til administrativ bydel."
+  },
+  
   "standard_variables": {
     "år": {
       "required_name": "år",
@@ -18,7 +24,13 @@
     },
     
     "geografi": {
-      "required_name": "bosted",
+      "suggested_names": {
+        "bosted": "Når data handler om hvor folk bor (befolkning, bosatte)",
+        "arbeidssted": "Når data handler om arbeidsplassens beliggenhet",
+        "geografi": "Generisk geografisk inndeling når kontekst er uklar",
+        "bydel": "Når spesifikt administrativ bydel",
+        "grunnkrets": "Når spesifikt grunnkretsnivå"
+      },
       "description": "Geografisk enhet (bydel, grunnkrets, etc.)",
       "data_type": "string",
       "alternative_names": [
@@ -31,12 +43,17 @@
         "geografi", "område", "region", "geo"
       ],
       "output_pattern": {
-        "code_column": "bosted_",
-        "label_column": "bosted",
-        "note": "Output bruker typisk både kode (bosted_) og navn (bosted). Tallkolonne først, tekstkolonne etter."
+        "typical": "to kolonner: [navn]_ (kode) og [navn] (tekst)",
+        "examples": {
+          "bosted_ + bosted": "Befolkningsdata - hvor folk bor",
+          "arbeidssted_ + arbeidssted": "Sysselsettingsdata - hvor folk jobber",
+          "geografi_ + geografi": "Generisk geografisk inndeling",
+          "bydel_ + bydel": "Spesifikt administrativ bydel"
+        },
+        "note": "VIKTIG: Velg navn basert på tabellens kontekst, ikke automatisk 'bosted'. Eksempel: Befolkning i Marka kan aggregeres til administrativ bydel - da er 'bydel' mer presist enn 'bosted'."
       },
       "codelists": ["SSB_til_PX_geo_bydel", "SSB_til_PX_geo_kommune", "SSB_til_PX_geo_grunnkrets", "SSB_til_PX_geo_delbydel", "SSB_til_PX_geo_grunnkretsområde"],
-      "notes": "Mest brukt output-variabel (6/9 tabeller). Standardiser til 'bosted' (navn) og 'bosted_' (kode). Bruk PX-kode fra kodelister."
+      "notes": "KONTEKSTUELT: Mest brukt i treningsdata var 'bosted' (6/9), men dette passer ikke alltid. Velg geografinavn som reflekterer tabellens innhold. Bruk alltid PX-kode fra kodelister."
     },
     
     "kjønn": {
@@ -345,12 +362,19 @@
     "geographic_transformation": {
       "input_columns": 23,
       "output_columns": 6,
-      "insight": "Største transformasjon: 23 ulike geografiske input-kolonner → 6 standardiserte output. Primært 'bosted' (6x) og 'bosted_' (5x)",
+      "insight": "Største transformasjon: 23 ulike geografiske input-kolonner → 6 standardiserte output",
+      "most_common_output": "bosted/bosted_ (11x totalt i 6/9 tabeller)",
+      "important_note": "Dette er mønstre fra treningsdata, ikke absolutte regler. Velg geografinavn basert på tabellens kontekst. Eksempel: Befolkning i Marka aggregert til administrativ bydel → bruk 'bydel', ikke 'bosted'.",
       "most_common_inputs": [
         "bydel2", "bo_bydel", "b_delbydel2017_01", "delbydel2017_01", 
         "Bydel", "Delbydel", "Bydel_Num", "Delbydel_Num"
       ],
-      "standard_outputs": ["bosted", "bosted_", "geografi", "geografi_navn"]
+      "suggested_outputs": {
+        "bosted/bosted_": "Befolkningsdata - hvor folk bor",
+        "arbeidssted/arbeidssted_": "Sysselsettingsdata - arbeidsplassens beliggenhet",
+        "bydel/bydel_": "Administrativ bydel (inkl. aggregert data fra Marka)",
+        "geografi/geografi_": "Generisk når kontekst er uklar"
+      }
     },
     
     "fmt_columns": {
@@ -378,7 +402,18 @@
       "år": "4/9 tabeller",
       "kjønn": "3/9 tabeller",
       "antall": "3/9 tabeller",
-      "insight": "Geografistandardisering til 'bosted' er klart viktigste transformasjon"
+      "insight": "Geografistandardisering er viktigste transformasjon, men 'bosted' er ikke alltid riktig valg - vurder kontekst (bosted vs. arbeidssted vs. bydel vs. geografi)."
+    },
+    
+    "validation_philosophy": {
+      "description": "Hvordan bruke kontrollskjemaet",
+      "principles": [
+        "Kontrollskjemaet er en GUIDE, ikke en absolut regel",
+        "Treningsdata viser vanlige mønstre, men hver tabell har sin kontekst",
+        "Geografiske navn må reflektere hva data faktisk representerer",
+        "Eksempel: Marka-bosatte aggregert til admin. bydel → bruk 'bydel', ikke 'bosted'",
+        "Validering skal hjelpe med kvalitetssikring, ikke hindre fornuftige valg"
+      ]
     }
   },
   
