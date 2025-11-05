@@ -65,6 +65,7 @@ class TablePrep:
         Returns:
             The generated script as a string
         """
+        input_file = table_config.get("input_file", "data.csv")
         script = f"""#!/usr/bin/env python3
 \"\"\"
 Auto-generated script for statistics table preparation.
@@ -75,7 +76,7 @@ import pandas as pd
 
 def prepare_table():
     # Load data
-    data = pd.read_csv('{table_config.get('input_file', 'data.csv')}')
+    data = pd.read_csv('{input_file}')
 
     # Prepare table
     # TODO: Add specific transformations based on config

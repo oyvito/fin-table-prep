@@ -3,6 +3,7 @@ Command-line interface for fin-table-prep.
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from fin_table_prep.table_prep import TablePrep
@@ -44,8 +45,6 @@ def main():
     # Load configuration if provided
     config = {}
     if args.config:
-        import json
-
         config_path = Path(args.config)
         if config_path.exists():
             with open(config_path, "r") as f:
