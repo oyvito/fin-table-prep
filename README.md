@@ -46,16 +46,29 @@ pip install pandas openpyxl
 
 ### Grunnleggende bruk
 
+**For tabeller med én input-fil:**
 ```bash
-# Generer prep-script
-python generate_prep_script.py input.xlsx output_referanse.xlsx --table-code OK-SOS002
+# Generer prep-script (v2 - forbedret versjon)
+python generate_prep_script_v2.py input.xlsx --output output_referanse.xlsx --table-code OK-BEF001
 
-# Dette lager: OK-SOS002_prep.py
+# Dette lager: OK-BEF001_prep.py
 # Juster scriptet manuelt om nødvendig
 
 # Kjør det genererte scriptet
-python OK-SOS002_prep.py ny_input.xlsx ferdig_output.xlsx
+python OK-BEF001_prep.py ny_input.xlsx ferdig_output.xlsx
 ```
+
+**For tabeller med flere input-filer (f.eks. sysselsetting):**
+```bash
+# Generer prep-script med to input-filer
+python generate_prep_script_v2.py sysselsatte.xlsx befolkning.xlsx \
+    --output sysselsettingsandel_output.xlsx --table-code OK-SYS001
+
+# Kjør scriptet med begge input-filer
+python OK-SYS001_prep.py sysselsatte.xlsx befolkning.xlsx output.xlsx
+```
+
+📖 **Se [QUICK_START.md](QUICK_START.md) for detaljert guide**
 
 ### Eksempel: OK-SOS002
 

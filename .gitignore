@@ -55,9 +55,11 @@ htmlcov/
 !examples/**/*.xlsx
 !examples/**/*.xls
 !examples/**/*.csv
-!training_data/**/*.xlsx
-!training_data/**/*.xls
-!training_data/**/*.csv
+
+# Training data (kan inneholde sensitiv informasjon)
+training_data/
+!training_data/metadata_template.json
+!training_data/README.md
 
 # Generated prep scripts (lagres bare i training_data/)
 *_prep.py

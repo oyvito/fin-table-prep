@@ -1,0 +1,28 @@
+{
+  "table_code": "OK-XXX999",
+  "table_name": "Beskrivende navn på tabellen",
+  "category": "befolkning|sysselsetting|sosial|utdanning|annet",
+  "complexity": "enkel|middels|kompleks",
+  "num_input_files": 1,
+  "input_files": [
+    {
+      "filename": "input1.xlsx",
+      "description": "Hva inneholder denne filen",
+      "source": "SSB|NAV|Annen kilde"
+    }
+  ],
+  "transformations": {
+    "column_renames": true,
+    "value_mappings": true,
+    "codelists_used": ["geo_bydel", "nav_tknr"],
+    "calculations": ["andel", "sum", "gjennomsnitt"],
+    "joins": true,
+    "aggregations": false
+  },
+  "challenges": [
+    "Beskriv eventuelle utfordringer eller spesielle tilfeller"
+  ],
+  "notes": "Andre notater",
+  "created_date": "2025-11-05",
+  "last_updated": "2025-11-05"
+}
