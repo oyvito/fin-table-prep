@@ -57,10 +57,97 @@ def load_kontrollskjema():
     return None
 
 
+def suggest_geographic_column_name(input_col_name, table_code=None, df_input=None):
+    """
+    Foreslå geografisk kolonnenavn basert på kontekst.
+    
+    Args:
+        input_col_name: Navn på input-kolonne
+        table_code: Tabellkode (f.eks. OK-BEF001, OK-SYS001)
+        df_input: Input dataframe for å analysere innhold
+    
+    Returns:
+        tuple: (suggested_code_col, suggested_label_col, reasoning)
+    """
+    col_lower = input_col_name.lower()
+    
+    # Detekter kontekst fra kolonnenavn
+    is_work = any(word in col_lower for word in ['arb', 'arbeid', 'work', 'job', 'sysselset'])
+    is_home = any(word in col_lower for word in ['bo', 'bost', 'home', 'resident', 'bosatt'])
+    
+    # Detekter nivå
+    is_grunnkrets = 'krets' in col_lower or 'gkrets' in col_lower
+    is_delbydel = 'delbydel' in col_lower
+    is_bydel = 'bydel' in col_lower and not is_delbydel
+    
+    # Detekter fra tabellkode
+    domain = None
+    if table_code:
+        if table_code.startswith('OK-BEF'):
+            domain = 'befolkning'
+        elif table_code.startswith('OK-SYS'):
+            domain = 'sysselsetting'
+        elif table_code.startswith('OK-UTD'):
+            domain = 'utdanning'
+        elif table_code.startswith('OK-NAE'):
+            domain = 'næring'
+        elif table_code.startswith('OK-VAL'):
+            domain = 'valg'
+    
+    # Bestem navn basert på kontekst
+    reasoning = []
+    
+    if is_grunnkrets:
+        code_col = 'grunnkrets_'
+        label_col = 'grunnkrets'
+        reasoning.append("Grunnkretsnivå detektert fra kolonnenavn")
+    elif is_delbydel:
+        code_col = 'delbydel_'
+        label_col = 'delbydel'
+        reasoning.append("Delbydelsnivå detektert fra kolonnenavn")
+    elif is_work:
+        code_col = 'arbeidssted_'
+        label_col = 'arbeidssted'
+        reasoning.append("Arbeidssted detektert (arb/arbeid i kolonnenavn)")
+    elif is_home or domain in ['befolkning', 'valg']:
+        code_col = 'bosted_'
+        label_col = 'bosted'
+        if is_home:
+            reasoning.append("Bosted detektert (bo/bost i kolonnenavn)")
+        if domain in ['befolkning', 'valg']:
+            reasoning.append(f"Domene '{domain}' indikerer bostedsdata")
+    elif is_bydel:
+        # Bydel kan være både bosted og generisk
+        if domain == 'befolkning':
+            code_col = 'bosted_'
+            label_col = 'bosted'
+            reasoning.append("Befolkningsdata med bydel → bruk 'bosted'")
+            reasoning.append("MERK: Hvis Marka aggregeres til admin. bydel, vurder 'bydel' i stedet")
+        else:
+            code_col = 'bydel_'
+            label_col = 'bydel'
+            reasoning.append("Bydelsnivå, domene ikke befolkning → bruk 'bydel'")
+    else:
+        # Fallback til generisk geografi
+        code_col = 'geografi_'
+        label_col = 'geografi'
+        reasoning.append("Generisk geografisk kolonne - vurder spesifikt navn basert på innhold")
+    
+    return code_col, label_col, reasoning
+
+
 def find_column_mapping_with_codelists(df_input, df_output, codelist_manager, 
-                                      kontrollskjema=None, similarity_threshold=0.6):
+                                      kontrollskjema=None, table_code=None, similarity_threshold=0.6):
     """
     Finn kolonnemappings mellom input og output, med kodeliste-støtte og standardisering.
+    
+    Args:
+        df_input: Input DataFrame
+        df_output: Output DataFrame
+        codelist_manager: CodelistManager instans
+        kontrollskjema: Kontrollskjema dict
+        table_code: Tabellkode for kontekstuell forståelse (f.eks. OK-BEF001)
+        similarity_threshold: Minimum likhet for matching (0-1)
     """
     input_cols = df_input.columns.tolist()
     output_cols = df_output.columns.tolist()
@@ -68,6 +155,7 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     mappings = {}
     value_transformations = {}  # Kodeliste-transformasjoner
     standardization_suggestions = {}  # Forslag til standardisering
+    geographic_suggestions = {}  # Forslag til geografiske kolonner
     used_output_cols = set()
     
     # Last standard variabler fra kontrollskjema
@@ -85,13 +173,34 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
                 alt_names = [name.lower() for name in std_info.get('alternative_names', [])]
                 
                 if in_col_lower == std_name or in_col_lower in alt_names:
-                    # Se om output har standard-navnet
-                    if std_name in output_cols:
-                        mappings[in_col] = std_name
-                        used_output_cols.add(std_name)
-                        if in_col != std_name:
-                            standardization_suggestions[in_col] = std_name
+                    # Spesialhåndtering for geografiske kolonner
+                    if std_name == 'geografi' or 'geografi' in str(std_info.get('description', '')).lower():
+                        # Foreslå kontekstuelt navn
+                        code_col, label_col, reasoning = suggest_geographic_column_name(
+                            in_col, table_code, df_input
+                        )
+                        geographic_suggestions[in_col] = {
+                            'code_column': code_col,
+                            'label_column': label_col,
+                            'reasoning': reasoning
+                        }
+                        # Prøv å matche mot output
+                        if code_col in output_cols:
+                            mappings[in_col] = code_col
+                            used_output_cols.add(code_col)
+                        elif label_col in output_cols:
+                            mappings[in_col] = label_col
+                            used_output_cols.add(label_col)
                         break
+                    else:
+                        # Standard matching for ikke-geografiske kolonner
+                        # Se om output har standard-navnet
+                        if std_name in output_cols:
+                            mappings[in_col] = std_name
+                            used_output_cols.add(std_name)
+                            if in_col != std_name:
+                                standardization_suggestions[in_col] = std_name
+                            break
     
     # 2. Eksakte match (for kolonner ikke fanget av kontrollskjema)
     for in_col in input_cols:
@@ -178,7 +287,14 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     unmapped_input = [col for col in input_cols if col not in mappings]
     unmapped_output = [col for col in output_cols if col not in used_output_cols]
     
-    return mappings, value_transformations, standardization_suggestions, unmapped_input, unmapped_output
+    return {
+        'mappings': mappings,
+        'value_transformations': value_transformations,
+        'standardization_suggestions': standardization_suggestions,
+        'geographic_suggestions': geographic_suggestions,
+        'unmapped_input': unmapped_input,
+        'unmapped_output': unmapped_output
+    }
 
 
 def generate_multi_input_script(input_files, output_file, table_code, 
@@ -223,34 +339,46 @@ def generate_multi_input_script(input_files, output_file, table_code,
     all_mappings = []
     all_transformations = []
     all_standardizations = []
+    all_geographic_suggestions = []
     
     for i, df_input in enumerate(input_dfs):
-        mappings, transformations, standardizations, unmapped_in, unmapped_out = \
-            find_column_mapping_with_codelists(df_input, df_output, codelist_mgr, kontrollskjema)
+        result = find_column_mapping_with_codelists(
+            df_input, df_output, codelist_mgr, kontrollskjema, table_code
+        )
         
         all_mappings.append({
             'file_index': i,
-            'mappings': mappings,
-            'unmapped_input': unmapped_in,
-            'unmapped_output': unmapped_out
+            'mappings': result['mappings'],
+            'unmapped_input': result['unmapped_input'],
+            'unmapped_output': result['unmapped_output']
         })
         
-        all_transformations.append(transformations)
-        all_standardizations.append(standardizations)
+        all_transformations.append(result['value_transformations'])
+        all_standardizations.append(result['standardization_suggestions'])
+        all_geographic_suggestions.append(result['geographic_suggestions'])
         
         print(f"=== Input fil {i+1} ===")
-        print(f"Mappings funnet: {len(mappings)}")
-        print(f"Kodeliste-transformasjoner: {len(transformations)}")
-        if standardizations:
-            print(f"Standardiserings-forslag: {standardizations}")
-        print(f"Umappede input-kolonner: {unmapped_in}")
-        print(f"Umappede output-kolonner: {unmapped_out}\n")
+        print(f"Mappings funnet: {len(result['mappings'])}")
+        print(f"Kodeliste-transformasjoner: {len(result['value_transformations'])}")
+        if result['standardization_suggestions']:
+            print(f"Standardiserings-forslag: {result['standardization_suggestions']}")
+        if result['geographic_suggestions']:
+            print(f"\n🗺️  GEOGRAFISKE FORSLAG:")
+            for col, suggestion in result['geographic_suggestions'].items():
+                print(f"  {col} →")
+                print(f"    Kode-kolonne: {suggestion['code_column']}")
+                print(f"    Navn-kolonne: {suggestion['label_column']}")
+                print(f"    Begrunnelse:")
+                for reason in suggestion['reasoning']:
+                    print(f"      - {reason}")
+        print(f"Umappede input-kolonner: {result['unmapped_input']}")
+        print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
     
     # Generer script
     script_name = f"{table_code}_prep.py"
     
     script_content = generate_script_content_multi_input(
-        input_files, all_mappings, all_transformations, 
+        input_files, all_mappings, all_transformations, all_geographic_suggestions,
         df_output.columns.tolist(), table_code
     )
     
@@ -265,12 +393,25 @@ def generate_multi_input_script(input_files, output_file, table_code,
 
 
 def generate_script_content_multi_input(input_files, all_mappings, 
-                                       all_transformations, output_columns, 
-                                       table_code):
+                                       all_transformations, all_geographic_suggestions,
+                                       output_columns, table_code):
     """Generer selve Python-scriptet for multi-input transformasjon."""
     
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     num_inputs = len(input_files)
+    
+    # Samle geografiske forslag for kommentarer
+    geo_comments = []
+    for i, geo_sugg in enumerate(all_geographic_suggestions):
+        if geo_sugg:
+            geo_comments.append(f"\nInput fil {i+1} - Geografiske kolonneforslag:")
+            for col, suggestion in geo_sugg.items():
+                geo_comments.append(f"  {col}:")
+                geo_comments.append(f"    → Kode: {suggestion['code_column']}, Navn: {suggestion['label_column']}")
+                for reason in suggestion['reasoning']:
+                    geo_comments.append(f"       {reason}")
+    
+    geo_comment_block = "\n".join(geo_comments) if geo_comments else ""
     
     script = f'''"""
 Prep-script for {table_code}
@@ -278,6 +419,15 @@ Generert: {timestamp}
 Antall input-filer: {num_inputs}
 
 Dette scriptet tar {num_inputs} input-fil(er) og transformerer til output-format.
+
+VIKTIG - Geografiske kolonner:
+Kontrollskjemaet er en GUIDE, ikke en rigid mal. Velg geografinavn som 
+reflekterer tabellens innhold:
+- bosted: Befolkningsdata - hvor folk bor
+- arbeidssted: Sysselsettingsdata - arbeidsplassens beliggenhet  
+- bydel: Administrativ bydel (inkl. Marka aggregert til admin. bydel)
+- geografi: Generisk når kontekst er uklar
+{geo_comment_block}
 """
 
 import pandas as pd
