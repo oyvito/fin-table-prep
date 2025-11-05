@@ -1,0 +1,62 @@
+{
+  "name": "geo_bydel",
+  "description": "Mapping fra SSB-kode til PX-kode for geografisk nivå: Bydel",
+  "source": "SSB standard territorial codes til PxWeb format",
+  "last_updated": "2025-11-05",
+  "geo_level": "Bydel",
+  "source_column_patterns": [
+    ".*stp.*kode.*",
+    ".*ssb.*kode.*",
+    ".*geo.*kode.*",
+    ".*bydel.*kode.*"
+  ],
+  "target_column_patterns": [
+    ".*px.*kode.*",
+    ".*px.*code.*",
+    ".*geografi.*",
+    ".*bydel.*"
+  ],
+  "type": "mapping",
+  "mappings": {
+    "030101": "1",
+    "030102": "2",
+    "030103": "3",
+    "030104": "4",
+    "030105": "5",
+    "030106": "6",
+    "030107": "7",
+    "030108": "8",
+    "030109": "9",
+    "030110": "10",
+    "030111": "11",
+    "030112": "12",
+    "030113": "13",
+    "030114": "14",
+    "030115": "15",
+    "030116": "16",
+    "030117": "17",
+    "030199": "99",
+    "030188": "88"
+  },
+  "labels": {
+    "1": "Gamle Oslo",
+    "2": "Grünerløkka",
+    "3": "Sagene",
+    "4": "St. Hanshaugen",
+    "5": "Frogner",
+    "6": "Ullern",
+    "7": "Vestre Aker",
+    "8": "Nordre Aker",
+    "9": "Bjerke",
+    "10": "Grorud",
+    "11": "Stovner",
+    "12": "Alna",
+    "13": "Østensjø",
+    "14": "Nordstrand",
+    "15": "Søndre Nordstrand",
+    "16": "Sentrum",
+    "17": "Marka",
+    "99": "Uten registrert adresse",
+    "88": "Sentrum, marka og uten registrert adresse"
+  }
+}

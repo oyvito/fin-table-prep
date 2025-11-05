@@ -1,0 +1,26 @@
+{
+  "name": "geo_kommune",
+  "description": "Mapping fra SSB-kode til PX-kode for geografisk nivå: Kommune",
+  "source": "SSB standard territorial codes til PxWeb format",
+  "last_updated": "2025-11-05",
+  "geo_level": "Kommune",
+  "source_column_patterns": [
+    ".*stp.*kode.*",
+    ".*ssb.*kode.*",
+    ".*geo.*kode.*",
+    ".*kommune.*kode.*"
+  ],
+  "target_column_patterns": [
+    ".*px.*kode.*",
+    ".*px.*code.*",
+    ".*geografi.*",
+    ".*kommune.*"
+  ],
+  "type": "mapping",
+  "mappings": {
+    "0301": "100000"
+  },
+  "labels": {
+    "100000": "Oslo"
+  }
+}

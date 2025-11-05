@@ -1,0 +1,74 @@
+{
+  "name": "nav_tknr_til_px",
+  "description": "Mapping fra NAV TKNR (trygdekontornummer) til PX-kode for Oslo",
+  "source": "NAV TKNR codes til PxWeb format",
+  "last_updated": "2025-11-05",
+  "source_column_patterns": [
+    ".*tknr.*",
+    ".*trygdekontor.*",
+    ".*nav.*kontor.*"
+  ],
+  "target_column_patterns": [
+    ".*px.*kode.*",
+    ".*px.*code.*",
+    ".*geografi.*",
+    ".*bydel.*"
+  ],
+  "type": "mapping",
+  "mappings": {
+    "tknr_to_px": {
+      "301": "100000",
+      "326": "12",
+      "330": "9",
+      "312": "5",
+      "316": "1",
+      "328": "10",
+      "315": "2",
+      "331": "8",
+      "318": "14",
+      "314": "3",
+      "313": "4",
+      "327": "11",
+      "319": "15",
+      "335": "6",
+      "334": "7",
+      "321": "13"
+    },
+    "tknr_to_ssb": {
+      "301": "301",
+      "326": "30112",
+      "330": "30109",
+      "312": "30105",
+      "316": "30101",
+      "328": "30110",
+      "315": "30102",
+      "331": "30108",
+      "318": "30114",
+      "314": "30103",
+      "313": "30104",
+      "327": "30111",
+      "319": "30115",
+      "335": "30106",
+      "334": "30107",
+      "321": "30113"
+    }
+  },
+  "labels": {
+    "100000": "Oslo i alt",
+    "12": "Alna",
+    "9": "Bjerke",
+    "5": "Frogner",
+    "1": "Gamle Oslo",
+    "10": "Grorud",
+    "2": "Grünerløkka",
+    "8": "Nordre Aker",
+    "14": "Nordstrand",
+    "3": "Sagene",
+    "4": "St. Hanshaugen",
+    "11": "Stovner",
+    "15": "Søndre Nordstrand",
+    "6": "Ullern",
+    "7": "Vestre Aker",
+    "13": "Østensjø"
+  }
+}
