@@ -527,7 +527,8 @@ df_oslo['{geo_name_col}'] = '0301 Oslo i alt'
 
 
 def find_column_mapping_with_codelists(df_input, df_output, codelist_manager, 
-                                      kontrollskjema=None, table_code=None, similarity_threshold=0.6):
+                                      kontrollskjema=None, table_code=None, similarity_threshold=0.6,
+                                      known_pairs=None):
     """
     Finn kolonnemappings mellom input og output, med kodeliste-støtte og standardisering.
     
@@ -538,6 +539,8 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
         kontrollskjema: Kontrollskjema dict
         table_code: Tabellkode for kontekstuell forståelse (f.eks. OK-BEF001)
         similarity_threshold: Minimum likhet for matching (0-1)
+        known_pairs: Liste av variabel-par dicts [{'base': 'bydel', 'label': 'bydel_fmt'}, ...]
+                     Brukes for å unngå å mappe begge kolonner i et par
     """
     input_cols = df_input.columns.tolist()
     output_cols = df_output.columns.tolist()
@@ -548,6 +551,12 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     geographic_suggestions = {}  # Forslag til geografiske kolonner
     used_output_cols = set()
     
+    # Bygg sett av label-kolonner fra known_pairs for å hoppe over dem i første runde
+    skip_label_cols = set()
+    if known_pairs:
+        for pair in known_pairs:
+            skip_label_cols.add(pair['label'])
+    
     # Last standard variabler fra kontrollskjema
     standard_vars = {}
     if kontrollskjema:
@@ -556,6 +565,10 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     # 1. Sjekk mot kontrollskjema først
     if standard_vars:
         for in_col in input_cols:
+            # Hopp over label-kolonner i første runde (de mappes via base-kolonnen)
+            if in_col in skip_label_cols:
+                continue
+                
             in_col_lower = in_col.lower().strip()
             
             # Sjekk om input-kolonne matcher standard variabel eller alternativt navn
@@ -594,6 +607,10 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     
     # 2. Eksakte match (for kolonner ikke fanget av kontrollskjema)
     for in_col in input_cols:
+        # Hopp over label-kolonner og allerede mappede kolonner
+        if in_col in skip_label_cols or in_col in mappings:
+            continue
+            
         in_col_clean = in_col.lower().strip().replace(' ', '').replace('_', '')
         for out_col in output_cols:
             out_col_clean = out_col.lower().strip().replace(' ', '').replace('_', '')
@@ -701,6 +718,30 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     # Oppdater used_output_cols basert på nye mappings
     used_output_cols = set(mappings.values())
     
+    # 6. Mapper label-kolonner basert på known_pairs
+    # Nå som base-kolonner er mappet, kan vi mappe label-kolonner
+    if known_pairs:
+        for pair in known_pairs:
+            base_col = pair['base']
+            label_col = pair['label']
+            
+            # Hvis base er mappet, prøv å mappe label til tilsvarende _fmt kolonne
+            if base_col in mappings:
+                base_mapped = mappings[base_col]
+                # Søk etter output-kolonne med samme navn + _fmt eller _navn suffix
+                potential_labels = [
+                    base_mapped + '_fmt',
+                    base_mapped + '_navn',
+                    base_mapped.replace('_', '') + '_fmt',
+                    base_mapped.replace('_', '') + '_navn'
+                ]
+                
+                for potential_label in potential_labels:
+                    if potential_label in output_cols and potential_label not in used_output_cols:
+                        mappings[label_col] = potential_label
+                        used_output_cols.add(potential_label)
+                        break
+    
     unmapped_input = [col for col in input_cols if col not in mappings]
     unmapped_output = [col for col in output_cols if col not in used_output_cols]
     
@@ -752,7 +793,23 @@ def generate_multi_input_script(input_files, output_file, table_code,
     print(f"  Kolonner: {df_output.columns.tolist()}")
     print(f"  Rader: {len(df_output)}\n")
     
-    # Analyser mappings for hver input-fil
+    # FASE 1: Detekter variabel-par tidlig (før kolonnemapping)
+    # Dette lar oss unngå å mappe begge kolonner i et par
+    print("=== FASE 1: Variabel-par deteksjon ===")
+    variable_pairs_all = []
+    for i, df_in in enumerate(input_dfs, 1):
+        pairs = detect_variable_pairs(df_in)
+        variable_pairs_all.append(pairs)
+        if pairs:
+            print(f"Variabel-par funnet i input {i}:")
+            for p in pairs:
+                print(f"  - {p['base']} / {p['label']} ({p['pattern']})")
+        else:
+            print(f"Ingen variabel-par funnet i input {i}")
+        print()
+    
+    # FASE 2: Analyser mappings for hver input-fil (med variabel-par info)
+    print("=== FASE 2: Kolonnemapping ===")
     all_mappings = []
     all_transformations = []
     all_standardizations = []
@@ -760,7 +817,8 @@ def generate_multi_input_script(input_files, output_file, table_code,
     
     for i, df_input in enumerate(input_dfs):
         result = find_column_mapping_with_codelists(
-            df_input, df_output, codelist_mgr, kontrollskjema, table_code
+            df_input, df_output, codelist_mgr, kontrollskjema, table_code,
+            known_pairs=variable_pairs_all[i]  # Send variabel-par info!
         )
         
         all_mappings.append({
@@ -791,28 +849,15 @@ def generate_multi_input_script(input_files, output_file, table_code,
         print(f"Umappede input-kolonner: {result['unmapped_input']}")
         print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
 
-    # 1) Multi-input struktur: identifiser felles nøkler
+    # FASE 3: Multi-input struktur: identifiser felles nøkler
     # VIKTIG: Sender med mappings slik at vi finner felles kolonner basert på STANDARDNAVN
+    print("=== FASE 3: Multi-input nøkkelanalyse ===")
     common_keys_info = identify_common_keys(input_dfs, df_output, all_mappings)
-    print("=== Multi-input nøkkelanalyse ===")
     print(f"Foreslåtte felles nøkkelkolonner (standardnavn): {common_keys_info['candidate_keys']}")
     print(f"Unikhetsratio per kolonne: {common_keys_info['key_quality']}")
     print(f"Kompositt unikhet (approx): {common_keys_info['composite_uniqueness']:.3f}\n")
 
-    # 2) Variabel-par deteksjon per input
-    variable_pairs_all = []
-    for i, df_in in enumerate(input_dfs, 1):
-        pairs = detect_variable_pairs(df_in)
-        variable_pairs_all.append(pairs)
-        if pairs:
-            print(f"Variabel-par funnet i input {i}:")
-            for p in pairs:
-                print(f"  - {p['base']} / {p['label']} ({p['pattern']})")
-        else:
-            print(f"Ingen variabel-par funnet i input {i}")
-        print()
-
-    # 3) Aggregeringsanalyse (bruk første input som referanse)
+    # FASE 4: Aggregeringsanalyse (bruk første input som referanse)
     aggregation_insights = []
     if input_dfs:
         try:
