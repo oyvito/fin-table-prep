@@ -1,0 +1,8 @@
+{
+  "description": "Example configuration for table preparation",
+  "columns": ["name", "age"],
+  "aggregations": {
+    "group_by": "city",
+    "functions": ["count", "mean"]
+  }
+}
