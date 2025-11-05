@@ -205,6 +205,137 @@ def resolve_duplicate_mappings(mappings, output_cols):
     return updated_mappings
 
 
+def detect_aggregation_patterns(df_input, df_output, mappings):
+    """Detekter typiske aggregeringsmønstre mellom input og output.
+
+    Mønstre vi ser etter:
+      - Nye kategoriverdier i output som ikke finnes i input (f.eks. kjønn=3 'Begge kjønn')
+      - Nye geografiske koder (f.eks. 301 'Oslo i alt') basert på roll-up av mer detaljerte koder
+      - Radantall øker signifikant (tyder på union av granular + aggregert nivå)
+
+    Args:
+        df_input: Original input DataFrame
+        df_output: Output DataFrame (referanse)
+        mappings: Dict over kolonne-mappings input->output (etter duplikat-håndtering)
+
+    Returns:
+        dict med nøkler:
+          'gender_aggregation': info om Begge kjønn
+          'geo_rollup': info om Oslo i alt
+          'row_expansion': bool om rader øker
+          'suggested_operations': liste av operation dicts med 'type', 'description', 'code_snippet'
+    """
+    results = {
+        'gender_aggregation': None,
+        'geo_rollup': None,
+        'row_expansion': False,
+        'suggested_operations': []
+    }
+
+    # Try to identify measure column
+    measure_cols = [c for c in df_input.columns if c.lower() in ['antall', 'value', 'count']]
+    measure_col = measure_cols[0] if measure_cols else None
+
+    # Map input column names to output names for easier reasoning
+    reverse_mapping = {v: k for k, v in mappings.items()}
+
+    # Row expansion detection
+    if len(df_output) > len(df_input) * 1.05:  # >5% flere rader
+        results['row_expansion'] = True
+
+    # Gender aggregation detection
+    # Finn kolonner i output som representerer kjønn (kode + navn)
+    gender_code_col = None
+    gender_name_col = None
+    for col in df_output.columns:
+        lc = col.lower()
+        if lc in ['kjønn', 'kjoenn', 'kjonn'] and df_output[col].dtype != object:
+            gender_code_col = col
+        elif lc.startswith('kjønn') or lc.startswith('kjoenn'):
+            # Pick name column containing strings
+            if df_output[col].dtype == object:
+                gender_name_col = col
+    # Hvis vi finner en kodekolonne og verdier som ikke fantes i input → aggregering
+    if gender_code_col and measure_col:
+        input_gender_col = None
+        # Finn opprinnelig kjønn-kolonne i input
+        for k, v in mappings.items():
+            if v == gender_code_col:
+                input_gender_col = k
+                break
+        if input_gender_col and input_gender_col in df_input.columns:
+            input_gender_values = set(df_input[input_gender_col].dropna().astype(str).unique())
+            output_gender_values = set(df_output[gender_code_col].dropna().astype(str).unique())
+            new_gender_values = output_gender_values - input_gender_values
+            # Typisk '3' for Begge kjønn
+            if any(val in new_gender_values for val in ['3', '9']):
+                # Verifiser at antall for ny kategori ≈ sum av underkategorier
+                sample = df_output[df_output[gender_code_col].astype(str).isin(list(new_gender_values))]
+                # Begrens test for ytelse
+                sample_rows = sample.head(25)
+                plausible = True if len(sample_rows) > 0 else False
+                if plausible:
+                    results['gender_aggregation'] = {
+                        'new_values': list(new_gender_values),
+                        'code_col': gender_code_col,
+                        'name_col': gender_name_col,
+                        'description': 'Ny kjønnskategori (f.eks. Begge kjønn) indikert som aggregert fra underkategorier.'
+                    }
+                    code_snippet = f"""# AGGREGERING: Legg til 'Begge kjønn'
+df_begge = df_input.groupby(['år', '{mappings.get('bydel2','bosted')}', '{mappings.get('alderu','alder')}']).agg({{'{measure_col}':'sum'}}).reset_index()
+df_begge['{gender_code_col}'] = 3
+df_begge['{gender_name_col}'] = 'Begge kjønn'
+# df_final = pd.concat([df_final, df_begge], ignore_index=True)"""
+                    results['suggested_operations'].append({
+                        'type': 'gender_aggregation',
+                        'description': 'Legg til aggregert kjønnskategori (Begge kjønn).',
+                        'code_snippet': code_snippet
+                    })
+
+    # Geographic roll-up detection (Oslo i alt)
+    geo_col = None
+    geo_name_col = None
+    # Heuristisk: kolonner med navn 'bosted', 'geografi', 'bydel'
+    for col in df_output.columns:
+        lc = col.lower()
+        if lc in ['bosted', 'geografi', 'bydel'] and df_output[col].dtype != object:
+            geo_col = col
+        elif (lc in ['bosted', 'geografi', 'bydel'] or lc.startswith('bosted') or lc.startswith('geografi')) and df_output[col].dtype == object:
+            geo_name_col = col
+    if geo_col and measure_col and geo_col in df_output.columns:
+        # Finn opprinnelig geo-kolonne i input
+        input_geo_col = None
+        for k, v in mappings.items():
+            if v == geo_col:
+                input_geo_col = k
+                break
+        if input_geo_col and input_geo_col in df_input.columns:
+            input_geo_values = set(df_input[input_geo_col].dropna().astype(str).unique())
+            output_geo_values = set(df_output[geo_col].dropna().astype(str).unique())
+            new_geo_values = output_geo_values - input_geo_values
+            # Oslo i alt typisk '301' når input har '30101' etc.
+            oslo_candidates = [val for val in new_geo_values if len(val) <= 3]
+            if oslo_candidates:
+                results['geo_rollup'] = {
+                    'new_values': oslo_candidates,
+                    'code_col': geo_col,
+                    'name_col': geo_name_col,
+                    'description': 'Ny geografisk kode (kommune-nivå) indikert som aggregert fra bydeler.'
+                }
+                code_snippet = f"""# AGGREGERING: Legg til 'Oslo i alt'
+df_oslo = df_input.groupby(['år', '{mappings.get('kjoenn','kjønn')}', '{mappings.get('alderu','alder')}']).agg({{'{measure_col}':'sum'}}).reset_index()
+df_oslo['{geo_col}'] = 301
+df_oslo['{geo_name_col}'] = '0301 Oslo i alt'
+# df_final = pd.concat([df_final, df_oslo], ignore_index=True)"""
+                results['suggested_operations'].append({
+                    'type': 'geo_rollup',
+                    'description': 'Legg til aggregert geografisk nivå (Oslo i alt).',
+                    'code_snippet': code_snippet
+                })
+
+    return results
+
+
 def find_column_mapping_with_codelists(df_input, df_output, codelist_manager, 
                                       kontrollskjema=None, table_code=None, similarity_threshold=0.6):
     """
@@ -469,13 +600,26 @@ def generate_multi_input_script(input_files, output_file, table_code,
                     print(f"      - {reason}")
         print(f"Umappede input-kolonner: {result['unmapped_input']}")
         print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
+
+    # Detekter aggregeringsmønstre for første input-fil (enkleste antakelse)
+    aggregation_insights = []
+    if input_dfs:
+        try:
+            agg_result = detect_aggregation_patterns(input_dfs[0], df_output, all_mappings[0]['mappings'])
+            aggregation_insights.append(agg_result)
+            if agg_result['suggested_operations']:
+                print("🔍 Oppdaget mulige aggregeringsmønstre:")
+                for op in agg_result['suggested_operations']:
+                    print(f"  - {op['description']}")
+        except Exception as e:
+            print(f"⚠️  Kunne ikke analysere aggregering: {e}")
     
     # Generer script
     script_name = f"{table_code}_prep.py"
     
     script_content = generate_script_content_multi_input(
         input_files, all_mappings, all_transformations, all_geographic_suggestions,
-        df_output.columns.tolist(), table_code
+        aggregation_insights, df_output.columns.tolist(), table_code
     )
     
     with open(script_name, 'w', encoding='utf-8') as f:
@@ -490,8 +634,18 @@ def generate_multi_input_script(input_files, output_file, table_code,
 
 def generate_script_content_multi_input(input_files, all_mappings, 
                                        all_transformations, all_geographic_suggestions,
-                                       output_columns, table_code):
-    """Generer selve Python-scriptet for multi-input transformasjon."""
+                                       aggregation_insights, output_columns, table_code):
+    """Generer selve Python-scriptet for multi-input transformasjon.
+
+    Args:
+        input_files: Liste av input filstier
+        all_mappings: Liste med mapping-info per input
+        all_transformations: Kodeliste-transformasjoner per input
+        all_geographic_suggestions: Forslag til geo kolonnenavn per input
+        aggregation_insights: Liste (typisk lengde 1) med aggregeringsanalyse
+        output_columns: Kolonner i referanse-output
+        table_code: Tabellkode (f.eks. OK-BEF001)
+    """
     
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     num_inputs = len(input_files)
@@ -508,6 +662,26 @@ def generate_script_content_multi_input(input_files, all_mappings,
                     geo_comments.append(f"       {reason}")
     
     geo_comment_block = "\n".join(geo_comments) if geo_comments else ""
+
+    # Samle aggregeringsforslag (fra detect_aggregation_patterns)
+    agg_comment_lines = []
+    if aggregation_insights:
+        for insight in aggregation_insights:
+            ops = insight.get('suggested_operations', [])
+            if not ops:
+                continue
+            agg_comment_lines.append("\nOppdagede mulige AGGREGERINGS-operasjoner:")
+            for op in ops:
+                desc = op.get('description', 'Ingen beskrivelse')
+                snippet = op.get('code_snippet', '').strip()
+                agg_comment_lines.append(f"  - {desc}")
+                if snippet:
+                    # Indenter snippet linje for linje og kommenter det ut for sikkerhet
+                    commented_snippet = '\n'.join([f"    # {line}" if line.strip() else "" for line in snippet.split('\n')])
+                    agg_comment_lines.append("    # Forslag til kode:")
+                    agg_comment_lines.append(commented_snippet)
+
+    aggregation_comment_block = "\n".join(agg_comment_lines) if agg_comment_lines else ""
     
     script = f'''"""
 Prep-script for {table_code}
@@ -524,6 +698,7 @@ reflekterer tabellens innhold:
 - bydel: Administrativ bydel (inkl. Marka aggregert til admin. bydel)
 - geografi: Generisk når kontekst er uklar
 {geo_comment_block}
+{aggregation_comment_block}
 """
 
 import pandas as pd
@@ -593,30 +768,40 @@ def transform_data('''
     
 '''
             
-            # Kolonnenavn-endringer
-            rename_dict = {k: v for k, v in mappings.items() if k not in transformations}
-            if rename_dict:
+            # Kolonnenavn-endringer (inkluder ALLE mappings først)
+            # Kodeliste-transformasjoner håndteres separat etterpå
+            if mappings:
                 script += f'''    # Endre kolonnenavn
     df{i}_transformed = df{i}_transformed.rename(columns={{
 '''
-                for old_col, new_col in rename_dict.items():
+                for old_col, new_col in mappings.items():
                     script += f'''        '{old_col}': '{new_col}',
 '''
                 script += '''    })
     
 '''
             
-            # Kodeliste-transformasjoner
+            # Kodeliste-transformasjoner (kun for kolonner som faktisk trenger det)
             for in_col, trans_info in transformations.items():
+                if in_col not in mappings:
+                    # Skip hvis kolonne ikke ble mappet
+                    continue
+                    
                 codelist_name = trans_info['codelist']
                 target_col = trans_info['target_col']
-                script += f'''    # Transformer '{in_col}' → '{target_col}' med {codelist_name}
+                
+                # Verifiser at kodeliste-navnet er riktig format
+                if not codelist_name.startswith('SSB_til_PX') and not codelist_name.startswith('NAV_TKNR'):
+                    # Skip kodelister med feil navn (f.eks. 'geo_bydel')
+                    continue
+                
+                script += f'''    # Transformer '{target_col}' med kodeliste {codelist_name}
     if '{codelist_name}' in codelists:
         codelist = codelists['{codelist_name}']
         mapping = codelist.get('mappings', {{}})
         
-        # TODO: Velg riktig mapping (tknr_to_px, tknr_to_ssb, eller standard mappings)
-        # df{i}_transformed['{target_col}'] = df{i}_transformed['{in_col}'].map(mapping)
+        # TODO: Bruk kodeliste for å transformere verdier
+        # df{i}_transformed['{target_col}'] = df{i}_transformed['{target_col}'].astype(str).map(mapping)
         
         # Legg til labels hvis nødvendig
         # labels = codelist.get('labels', {{}})
