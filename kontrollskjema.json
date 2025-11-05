@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "last_updated": "2025-11-05",
   "description": "Kontrollskjema for standardisering av tabeller i statistikkbanken",
   
@@ -18,12 +18,25 @@
     },
     
     "geografi": {
-      "required_name": "geografi",
+      "required_name": "bosted",
       "description": "Geografisk enhet (bydel, grunnkrets, etc.)",
       "data_type": "string",
-      "alternative_names": ["bydel", "bo_bydel", "b_bydel", "område", "region", "geo", "delbydel", "b_delbydel2017_01"],
-      "codelists": ["SSB_til_PX_geo_bydel", "SSB_til_PX_geo_kommune", "SSB_til_PX_geo_grunnkrets"],
-      "notes": "Bruk PX-kode fra kodelister. Legg til separat navn-kolonne hvis nødvendig. Ignorer _fmt-kolonner."
+      "alternative_names": [
+        "bydel", "bo_bydel", "b_bydel", "arb_bydel", "a_bydel",
+        "bydel2", "bydel_1", "bydel_2", 
+        "Bydel", "Bydel_Num",
+        "delbydel", "b_delbydel2017_01", "a_delbydel2017_01", "delbydel2017_01",
+        "Delbydel", "Delbydel_Num",
+        "grunnkrets", "ny_krets_b", "arb_gkrets_a",
+        "geografi", "område", "region", "geo"
+      ],
+      "output_pattern": {
+        "code_column": "bosted_",
+        "label_column": "bosted",
+        "note": "Output bruker typisk både kode (bosted_) og navn (bosted). Tallkolonne først, tekstkolonne etter."
+      },
+      "codelists": ["SSB_til_PX_geo_bydel", "SSB_til_PX_geo_kommune", "SSB_til_PX_geo_grunnkrets", "SSB_til_PX_geo_delbydel", "SSB_til_PX_geo_grunnkretsområde"],
+      "notes": "Mest brukt output-variabel (6/9 tabeller). Standardiser til 'bosted' (navn) og 'bosted_' (kode). Bruk PX-kode fra kodelister."
     },
     
     "kjønn": {
@@ -36,6 +49,10 @@
         "1": "Mann",
         "2": "Kvinne"
       },
+      "output_pattern": {
+        "typical": "kjønn (kun navn-kolonne)",
+        "note": "Output bruker typisk bare tekstverdi, ikke kode. 3/9 tabeller har kjønn i output."
+      },
       "notes": "Standard SSB-koding. Output skal bruke tekstverdi (Mann/Kvinne/Begge kjønn), ikke koder."
     },
     
@@ -43,7 +60,16 @@
       "required_name": "alder",
       "description": "Alder eller aldersgruppe",
       "data_type": "string",
-      "alternative_names": ["Alder", "age", "aldersgruppe", "aldersgrupper", "ALDGR16a_", "aldgr16a__fmt"],
+      "alternative_names": [
+        "Alder", "age", 
+        "aldersgruppe", "aldersgrupper", 
+        "ALDGR16a_", "ALDGR06a_", "aldgr5", "alderu",
+        "aldgr16a__fmt", "aldgr06a__fmt", "alderu_fmt"
+      ],
+      "output_pattern": {
+        "typical": "alder eller aldersgruppe (navn)",
+        "note": "Output bruker typisk kun tekstlig beskrivelse, ikke koder. 2/9 tabeller."
+      },
       "notes": "Output format: '15-24 år', '25-39 år' etc. Konsistent formattering med mellomrom og 'år'."
     },
     
@@ -51,8 +77,12 @@
       "required_name": "antall",
       "description": "Antall observasjoner/personer",
       "data_type": "integer",
-      "alternative_names": ["Antall", "count", "n", "sum"],
-      "notes": "Alltid små bokstaver. Heltall."
+      "alternative_names": ["Antall", "count", "n", "sum", "antall_bedrifter"],
+      "output_pattern": {
+        "variations": ["antall", "antall personer", "antall stemmeberettigede", "antall stemmer", "elever"],
+        "note": "3/9 tabeller. Kan ha spesifikk beskrivelse (antall personer, antall bedrifter etc.)"
+      },
+      "notes": "Alltid små bokstaver. Heltall. Kan være spesifisert (antall personer, antall bedrifter)."
     },
     
     "andel": {
@@ -60,12 +90,16 @@
       "description": "Andel i prosent",
       "data_type": "float",
       "alternative_names": ["Andel", "prosent", "pct", "percentage", "andeler"],
+      "output_pattern": {
+        "variations": ["andel", "andeler", "andel sysselsatte", "andel av gruppe", "valgdeltagelse (prosent)", "andel elever (prosent)"],
+        "note": "Brukes i mange tabeller, ofte med spesifikk beskrivelse"
+      },
       "validation": {
         "min": 0,
         "max": 100,
         "decimals": 1
       },
-      "notes": "Alltid i prosent (0-100), ikke desimal (0-1). Én desimal."
+      "notes": "Alltid i prosent (0-100), ikke desimal (0-1). Én desimal. Kan være spesifisert (andel sysselsatte, valgdeltagelse etc.)."
     },
     
     "sysselsatte": {
@@ -80,8 +114,64 @@
       "required_name": "befolkning",
       "description": "Antall personer i befolkningen",
       "data_type": "integer",
-      "alternative_names": ["antall_befolkning", "befolkn", "population"],
-      "notes": "Brukes som nevner for andeler. Heltall."
+      "alternative_names": ["antall_befolkning", "befolkn", "population", "bosatte", "Referansebefolkning"],
+      "notes": "Brukes som nevner for andeler. Heltall. Kan være 'bosatte' eller 'Referansebefolkning' i output."
+    },
+    
+    "utdanningsnivå": {
+      "required_name": "utdanningsnivå",
+      "description": "Utdanningsnivå etter NUS-koding",
+      "data_type": "string",
+      "alternative_names": ["utdanning", "bu1_gr5_imp", "bu1_gr5_imp_fmt"],
+      "output_pattern": {
+        "typical": "utdanningsnivå (navn)",
+        "note": "2/9 tabeller. Output bruker tekstlig beskrivelse."
+      },
+      "notes": "NUS-standard. Output som tekst (Grunnskole, Videregående, Høyere utdanning)."
+    },
+    
+    "sysselsettingsstatus": {
+      "required_name": "sysselsettingsstatus",
+      "description": "Status for sysselsetting",
+      "data_type": "string",
+      "alternative_names": ["Sysselsettingsituasjon", "Syss_num", "sysselsettingsstatus_"],
+      "output_pattern": {
+        "code_column": "sysselsettingsstatus_",
+        "label_column": "Sysselsettingsstatus",
+        "note": "Kan ha både kode og navn i output"
+      },
+      "notes": "Fra SSB. Output kan være både kode og navn."
+    },
+    
+    "innvandringskategori": {
+      "required_name": "innvandringskategori",
+      "description": "Innvandringskategori",
+      "data_type": "string",
+      "alternative_names": ["Innvandringskategori", "innvandringskat"],
+      "output_pattern": {
+        "typical": "innvandringskategori (navn)"
+      },
+      "notes": "SSB-standard. Output som tekst (Innvandrere, Norskfødte med innvandrerforeldre, Øvrige)."
+    },
+    
+    "næring": {
+      "required_name": "næring",
+      "description": "Næringskode eller virksomhetskategori",
+      "data_type": "string",
+      "alternative_names": ["naring", "virksomhetskategori"],
+      "output_pattern": {
+        "typical": "virksomhetskategori (navn)",
+        "note": "Output bruker typisk beskrivende navn, ikke koder"
+      },
+      "notes": "SN-standard (Standard for næringsgruppering). Output som tekst."
+    },
+    
+    "fullføring": {
+      "required_name": "fullføring",
+      "description": "Fullføringsgrad eller status",
+      "data_type": "string",
+      "alternative_names": ["fullfort", "completion"],
+      "notes": "Brukes i utdanningstabeller for å indikere fullføringsgrad."
     }
   },
   
@@ -123,6 +213,27 @@
         "fmt_columns": "Bruk som fallback-navn hvis kodeliste ikke finnes",
         "when_codelist_exists": "Bruk kodeliste for både kode-transformasjon OG standardiserte navn",
         "when_no_codelist": "Behold både kode og _fmt (som _navn)"
+      },
+      "ml_learning_pattern": {
+        "description": "Mønstre som modellen vil lære over tid",
+        "categories": {
+          "always_need_code": {
+            "variables": ["geografi", "bydel", "grunnkrets", "delbydel"],
+            "reason": "Brukes i PxWeb, må ha korrekte PX-koder",
+            "output": "Både kode og navn"
+          },
+          "only_need_label": {
+            "variables": ["kjønn", "alder", "utdanning", "landbakgrunn"],
+            "reason": "Koden er ikke viktig for sluttbruker, kun navnet",
+            "output": "Kun navn (fra _fmt eller kodeliste)",
+            "note": "Modellen vil lære dette fra treningsdata ved å se at kode-kolonnen sjelden brukes i output"
+          },
+          "context_dependent": {
+            "variables": ["næring", "yrke", "sektor"],
+            "reason": "Noen tabeller trenger kode, andre bare navn",
+            "output": "Avhenger av tabell-kontekst"
+          }
+        }
       }
     }
   },
@@ -185,31 +296,98 @@
   
   "domain_specific": {
     "befolkning": {
-      "standard_variables": ["år", "geografi", "geografi_navn", "kjønn", "alder", "antall"],
+      "standard_variables": ["år", "bosted_", "bosted", "kjønn", "alder", "antall"],
       "notes": "Befolkningsstatistikk følger SSB-standard",
       "example_tables": ["OK-BEF001"]
     },
     
     "sysselsetting": {
-      "standard_variables": ["år", "geografi", "geografi_navn", "kjønn", "alder", "sysselsatte", "befolkning", "andel"],
+      "standard_variables": ["år", "bosted_", "bosted", "kjønn", "alder", "sysselsatte", "befolkning", "andel"],
       "calculation": "andel = (sysselsatte / befolkning) * 100",
       "notes": "Krever ofte join mellom sysselsettings- og befolkningsdata. Aldersgrupper må være konsistente.",
-      "example_tables": ["OK-SYS001", "OK-SYS002", "OK-SYS003"],
+      "example_tables": ["OK-SYS001", "OK-SYS002", "OK-SYS003", "OK-SYS005"],
       "common_patterns": {
         "fmt_columns": "SAS-uttrekk fra SSB har par av kolonner: 'variabel' (kode) og 'variabel_fmt' (navn/tekst). Begge trengs vanligvis, UNNTATT når kodeliste brukes (da hentes navn fra kodeliste).",
         "xml_encoding": "Input kan ha XML-encoded verdier (_x0030_ osv.) som må dekodes",
         "column_case": "Input kan ha STORE BOKSTAVER, skal bli små i output",
-        "code_and_label_pairs": "Typiske par: bydel/bydel_fmt, kjoenn/kjoenn_fmt, aldgr/aldgr_fmt"
+        "code_and_label_pairs": "Typiske par: bydel/bydel_fmt, kjoenn/kjoenn_fmt, aldgr/aldgr_fmt",
+        "multi_input": "3/9 tabeller bruker flere input-filer for join/beregninger"
       }
     },
     
     "utdanning": {
-      "standard_variables": ["år", "geografi", "kjønn", "alder", "utdanningsnivå", "antall"],
-      "notes": "Utdanningsnivå følger NUS-koding"
+      "standard_variables": ["år", "bosted_", "bosted", "kjønn", "alder", "utdanningsnivå", "antall"],
+      "notes": "Utdanningsnivå følger NUS-koding",
+      "example_tables": ["OK-UTD027", "OK-UTD029"]
+    },
+    
+    "næring": {
+      "standard_variables": ["år", "bosted_", "bosted", "virksomhetskategori", "antall"],
+      "notes": "Næringsgruppering følger SN-standard",
+      "example_tables": ["OK-NAE001"]
+    },
+    
+    "valg": {
+      "standard_variables": ["valgår", "bosted_", "bosted", "kjønn", "innvandringskategori", "valgdeltagelse (prosent)", "antall stemmeberettigede", "antall stemmer"],
+      "notes": "Valgstatistikk med valgdeltagelse beregnet",
+      "example_tables": ["OK-VAL002"],
+      "common_patterns": {
+        "multi_year": "Ofte flere input-filer, én per valgår (2019, 2023 etc.)"
+      }
+    }
+  },
+  
+  "training_data_insights": {
+    "description": "Mønstre oppdaget fra analyse av 9 treningsdatabeller",
+    "last_analyzed": "2025-11-05",
+    "total_tables": 9,
+    
+    "geographic_transformation": {
+      "input_columns": 23,
+      "output_columns": 6,
+      "insight": "Største transformasjon: 23 ulike geografiske input-kolonner → 6 standardiserte output. Primært 'bosted' (6x) og 'bosted_' (5x)",
+      "most_common_inputs": [
+        "bydel2", "bo_bydel", "b_delbydel2017_01", "delbydel2017_01", 
+        "Bydel", "Delbydel", "Bydel_Num", "Delbydel_Num"
+      ],
+      "standard_outputs": ["bosted", "bosted_", "geografi", "geografi_navn"]
+    },
+    
+    "fmt_columns": {
+      "total_found": 14,
+      "code_fmt_pairs": 12,
+      "insight": "SSB SAS-uttrekk har konsistente kode+_fmt par. Viktig å håndtere riktig."
+    },
+    
+    "uppercase_columns": {
+      "total_found": 22,
+      "insight": "Mange kolonner i input har STORE BOKSTAVER, må normaliseres til små i output"
+    },
+    
+    "multi_input_usage": {
+      "tables": 3,
+      "total": 9,
+      "percentage": 33,
+      "examples": ["OK-SYS001", "OK-SYS002", "OK-VAL002"],
+      "insight": "1/3 av tabellene trenger flere input-filer for join/beregninger"
+    },
+    
+    "most_common_output_columns": {
+      "bosted": "6/9 tabeller",
+      "bosted_": "5/9 tabeller",
+      "år": "4/9 tabeller",
+      "kjønn": "3/9 tabeller",
+      "antall": "3/9 tabeller",
+      "insight": "Geografistandardisering til 'bosted' er klart viktigste transformasjon"
     }
   },
   
   "changelog": [
+    {
+      "date": "2025-11-05",
+      "version": "1.2",
+      "changes": "Oppdatert basert på analyse av 9 treningsdatabeller. Viktigste endringer: 1) 'geografi' → 'bosted' som standard output-navn (23 input → 6 output kolonner), 2) Utvidet alternative_names for alle variabler, 3) Lagt til output_pattern for å vise typiske output-strukturer, 4) Nye standard-variabler: utdanningsnivå, sysselsettingsstatus, innvandringskategori, næring, fullføring, 5) Training data insights-seksjon med statistikk (geografitransformasjon, _fmt-kolonner, multi-input bruk), 6) Nye domener: næring og valg, 7) Utvidet eksempel-tabeller (nå 9 stk)."
+    },
     {
       "date": "2025-11-05",
       "version": "1.1",
