@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "last_updated": "2025-11-05",
   "description": "Kontrollskjema for standardisering av tabeller i statistikkbanken",
   
@@ -8,43 +8,43 @@
       "required_name": "år",
       "description": "Årstall for statistikken",
       "data_type": "integer",
-      "alternative_names": ["årgang", "År", "year", "periode"],
+      "alternative_names": ["årgang", "aargang", "År", "year", "periode"],
       "validation": {
         "min": 1900,
         "max": 2100,
         "format": "YYYY"
       },
-      "notes": "Alltid med små bokstaver. Fire sifre."
+      "notes": "Alltid med små bokstaver. Fire sifre. Kan ha æøå-encoding i rådata."
     },
     
     "geografi": {
       "required_name": "geografi",
       "description": "Geografisk enhet (bydel, grunnkrets, etc.)",
       "data_type": "string",
-      "alternative_names": ["bydel", "område", "region", "geo"],
+      "alternative_names": ["bydel", "bo_bydel", "b_bydel", "område", "region", "geo", "delbydel", "b_delbydel2017_01"],
       "codelists": ["SSB_til_PX_geo_bydel", "SSB_til_PX_geo_kommune", "SSB_til_PX_geo_grunnkrets"],
-      "notes": "Bruk PX-kode fra kodelister. Legg til separat navn-kolonne hvis nødvendig."
+      "notes": "Bruk PX-kode fra kodelister. Legg til separat navn-kolonne hvis nødvendig. Ignorer _fmt-kolonner."
     },
     
     "kjønn": {
       "required_name": "kjønn",
       "description": "Kjønn",
       "data_type": "string",
-      "alternative_names": ["kjonn", "Kjønn", "gender", "sex"],
+      "alternative_names": ["kjonn", "kjoenn", "KJOENN", "Kjønn", "gender", "sex", "kjoenn_fmt"],
       "allowed_values": {
-        "0": "Alle",
-        "1": "Menn",
-        "2": "Kvinner"
+        "0": "Begge kjønn",
+        "1": "Mann",
+        "2": "Kvinne"
       },
-      "notes": "Standard SSB-koding. Alltid små bokstaver i variabelnavn."
+      "notes": "Standard SSB-koding. Output skal bruke tekstverdi (Mann/Kvinne/Begge kjønn), ikke koder."
     },
     
     "alder": {
       "required_name": "alder",
       "description": "Alder eller aldersgruppe",
       "data_type": "string",
-      "alternative_names": ["Alder", "age", "aldersgruppe"],
-      "notes": "Bruk format '0-5', '6-12', etc. for grupper. Enkeltår som '25'."
+      "alternative_names": ["Alder", "age", "aldersgruppe", "aldersgrupper", "ALDGR16a_", "aldgr16a__fmt"],
+      "notes": "Output format: '15-24 år', '25-39 år' etc. Konsistent formattering med mellomrom og 'år'."
     },
     
     "antall": {
@@ -59,13 +59,29 @@
       "required_name": "andel",
       "description": "Andel i prosent",
       "data_type": "float",
-      "alternative_names": ["Andel", "prosent", "pct", "percentage"],
+      "alternative_names": ["Andel", "prosent", "pct", "percentage", "andeler"],
       "validation": {
         "min": 0,
         "max": 100,
         "decimals": 1
       },
       "notes": "Alltid i prosent (0-100), ikke desimal (0-1). Én desimal."
+    },
+    
+    "sysselsatte": {
+      "required_name": "sysselsatte",
+      "description": "Antall sysselsatte personer",
+      "data_type": "integer",
+      "alternative_names": ["antall_sysselsatte", "sysselsetting", "employed"],
+      "notes": "Brukes i sysselsettingstabeller. Heltall."
+    },
+    
+    "befolkning": {
+      "required_name": "befolkning",
+      "description": "Antall personer i befolkningen",
+      "data_type": "integer",
+      "alternative_names": ["antall_befolkning", "befolkn", "population"],
+      "notes": "Brukes som nevner for andeler. Heltall."
     }
   },
   
@@ -151,14 +167,21 @@
   
   "domain_specific": {
     "befolkning": {
-      "standard_variables": ["år", "geografi", "kjønn", "alder", "antall"],
-      "notes": "Befolkningsstatistikk følger SSB-standard"
+      "standard_variables": ["år", "geografi", "geografi_navn", "kjønn", "alder", "antall"],
+      "notes": "Befolkningsstatistikk følger SSB-standard",
+      "example_tables": ["OK-BEF001"]
     },
     
     "sysselsetting": {
-      "standard_variables": ["år", "geografi", "kjønn", "alder", "antall_sysselsatte", "antall_befolkning", "sysselsettingsandel"],
-      "calculation": "sysselsettingsandel = (antall_sysselsatte / antall_befolkning) * 100",
-      "notes": "Krever join mellom sysselsettings- og befolkningsdata"
+      "standard_variables": ["år", "geografi", "geografi_navn", "kjønn", "alder", "sysselsatte", "befolkning", "andel"],
+      "calculation": "andel = (sysselsatte / befolkning) * 100",
+      "notes": "Krever ofte join mellom sysselsettings- og befolkningsdata. Aldersgrupper må være konsistente.",
+      "example_tables": ["OK-SYS001", "OK-SYS002", "OK-SYS003"],
+      "common_patterns": {
+        "input_columns_to_ignore": ["*_fmt", "kode_kolonner_uten_navn"],
+        "xml_encoding": "Input kan ha XML-encoded verdier (_x0030_ osv.)",
+        "column_case": "Input kan ha STORE BOKSTAVER, skal bli små i output"
+      }
     },
     
     "utdanning": {
@@ -168,6 +191,11 @@
   },
   
   "changelog": [
+    {
+      "date": "2025-11-05",
+      "version": "1.1",
+      "changes": "Oppdatert basert på treningsdata (OK-SYS001-003). Lagt til alternative navn fra SSB-uttrekk, støtte for XML-encoding, _fmt-kolonner, sysselsatte/befolkning-variabler."
+    },
     {
       "date": "2025-11-05",
       "version": "1.0",
