@@ -1,0 +1,129 @@
+{
+  "table_code": "OK-SYS002",
+  "description": "Sysselsatte etter bosted, kjønn og alder - med andeler",
+  "status": "partial_success",
+  "success_rate": "792/990 matches (80%)",
+  "created": "2025-11-05",
+  "updated": "2025-11-05",
+  
+  "learning_outcomes": {
+    "critical_insights": [
+      "IKKE en enkel merge - forskjellige årganger!",
+      "Sysselsatte (2024 Q4) vs Befolkning (2025-01-01)",
+      "Aargang må EKSKLUDERES fra merge-nøkler",
+      "Aldersgrupper må aggregeres før merge (5-års → 10+ års grupper)",
+      "Geografisk nivå kan være forskjellig (delbydel må aggregeres til bydel)"
+    ],
+    
+    "domain_knowledge_applied": [
+      {
+        "topic": "Tidsperioder for sysselsetting",
+        "rule": "Sysselsatte Q4 YYYY sammenlignes med befolkning 01.01.(YYYY+1)",
+        "reason": "Befolkning per 1.1. er tettest på 4. kvartal foregående år"
+      },
+      {
+        "topic": "Aldersgruppe-aggregering",
+        "rule": "Befolkning (5-års grupper) må aggregeres til sysselsatte's bredere grupper",
+        "implementation": "Bruk kodeliste aldgr5_til_aldgr16a.json",
+        "example": "15-19 + 20-24 → 15-24 år"
+      },
+      {
+        "topic": "Merge-nøkler",
+        "rule": "Merge på [geografi, aldersgrupper, kjoenn_fmt] - IKKE aargang",
+        "reason": "Årgangene er bevisst forskjellige (2024 vs 2025)"
+      },
+      {
+        "topic": "XML-escaping",
+        "rule": "OpenPyXL escape-koder må dekodes (_x0031_ → '1', _x0020_ → ' ')",
+        "implementation": "re.sub(r'_x([0-9a-fA-F]{4})_', lambda m: chr(int(m.group(1), 16)), text)"
+      }
+    ],
+    
+    "technical_patterns": {
+      "multi_input_type": "calculated_merge",
+      "year_mismatch": true,
+      "aggregation_required": true,
+      "calculation": "andeler = (sysselsatte / befolkning) * 100",
+      "merge_type": "outer",
+      "merge_keys": ["geografi", "aldersgrupper", "kjoenn_fmt"]
+    },
+    
+    "challenges_encountered": [
+      {
+        "issue": "Geografisk nivå-mismatch",
+        "description": "Input 1 har delbydel-nivå, Input 2 har bydel-nivå",
+        "solution_status": "not_solved",
+        "next_steps": "Må aggregere Input 1 til bydelsnivå før merge"
+      },
+      {
+        "issue": "Aldersgruppe-mismatch",
+        "description": "Input 1: brede grupper (15-24), Input 2: smale grupper (15-19, 20-24)",
+        "solution_status": "solved",
+        "solution": "Aggregere Input 2 med aldgr5_til_aldgr16a.json mapping"
+      },
+      {
+        "issue": "XML character escaping",
+        "description": "OpenPyXL returnerer _x0031_ i stedet for '1'",
+        "solution_status": "solved",
+        "solution": "Dekode med regex før videre prosessering"
+      }
+    ],
+    
+    "code_patterns_learned": [
+      {
+        "pattern": "age_group_aggregation",
+        "code": "df_befolkning['aldersgrupper'] = df_befolkning['aldersgrupper_smal'].map(aldgr_mapping)\ndf_agg = df_befolkning.groupby(['geografi', 'aldersgrupper', 'kjoenn_fmt']).agg({'befolkning': 'sum'}).reset_index()"
+      },
+      {
+        "pattern": "xml_decode",
+        "code": "def decode_xml_escapes(text):\n    return re.sub(r'_x([0-9a-fA-F]{4})_', lambda m: chr(int(m.group(1), 16)), str(text))"
+      },
+      {
+        "pattern": "year_aware_merge",
+        "code": "# Merge UTEN aargang (forskjellige år er OK)\ndf_merged = pd.merge(df_sysselsatte, df_befolkning_agg,\n                    on=['geografi', 'aldersgrupper', 'kjoenn_fmt'],\n                    how='outer')\n# Sett aargang fra sysselsettingsdata\ndf_merged['aargang'] = sysselsatte_aargang"
+      }
+    ],
+    
+    "improvements_needed": [
+      "Detekter geografisk nivå-mismatch automatisk",
+      "Aggreger til laveste felles geografiske nivå før merge",
+      "Detekter aldersgruppe-skjema automatisk (5-års vs 10+ års)",
+      "Detekter year-offset pattern (YYYY vs YYYY+1)",
+      "Generer andelsberegning automatisk når både teller og nevner finnes"
+    ],
+    
+    "reusable_for_tables": [
+      "OK-SYS003",
+      "OK-SYS005",
+      "Andre sysselsettingstabeller med andeler"
+    ]
+  },
+  
+  "validation": {
+    "expected_rows": 2124,
+    "actual_rows": 1026,
+    "match_rate": 0.48,
+    "issues": [
+      "Duplikater pga geografisk nivå-mismatch",
+      "Manglende aggregering av delbydel til bydel"
+    ]
+  },
+  
+  "files": {
+    "prep_script": "OK-SYS002_prep_v2.py",
+    "input_1": "OK-SYS002_input_1.xlsx",
+    "input_2": "OK-SYS002_input_2.xlsx",
+    "output_reference": "OK-SYS002_output.xlsx",
+    "output_rebuilt": "OK-SYS002_rebuilt_v2.xlsx",
+    "codelists_used": [
+      "aldgr5_til_aldgr16a.json"
+    ]
+  },
+  
+  "next_actions": [
+    "Implementer geografisk aggregering",
+    "Verifiser mot referanse-output",
+    "Dokumenter fullstendig løsning i prep_script",
+    "Bruk som mal for generate_prep_script_v2.py forbedringer"
+  ]
+}

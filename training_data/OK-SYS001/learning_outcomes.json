@@ -1,0 +1,136 @@
+{
+  "table_code": "OK-SYS001",
+  "description": "Sysselsatte etter arbeidssted og bosted, grunnkretsnivå",
+  "status": "success",
+  "success_rate": "100% (12,292 rows exact match)",
+  "created": "2025-11-05",
+  "updated": "2025-11-05",
+  
+  "learning_outcomes": {
+    "critical_insights": [
+      "Multi-input med SAMME aargang - enkel merge!",
+      "Geografiske kolonner har forskjellige navn men samme innhold",
+      "Kompositt nøkkel nødvendig: [aargang, grunnkrets, delbydel, bydel]",
+      "Variabel-par (_fmt kolonner) må håndteres riktig",
+      "Datatype-normalisering kritisk (Int64 for geo, str for aargang)"
+    ],
+    
+    "domain_knowledge_applied": [
+      {
+        "topic": "Arbeidssted vs Bosted",
+        "rule": "Samme tabell kan ha både arbeidssted- og bosted-dimensjon",
+        "implementation": "Kontekstuelle kolonnenavn: arbeidssted_grunnkrets vs bosted_grunnkrets",
+        "note": "I output: Kun 'grunnkrets' (generisk) siden det er samme geografiske enheter"
+      },
+      {
+        "topic": "Kompositt geografisk nøkkel",
+        "rule": "Grunnkrets alene er ikke unikt - må inkludere bydel og delbydel",
+        "reason": "Samme grunnkrets-nummer kan finnes i flere bydeler",
+        "merge_keys": ["aargang", "bydel", "delbydel", "grunnkrets"]
+      },
+      {
+        "topic": "NaN-håndtering i nøkler",
+        "rule": "Rader med manglende geografiske nøkler må ekskluderes",
+        "implementation": "dropna(subset=['grunnkrets']) på mest detaljerte nivå"
+      }
+    ],
+    
+    "technical_patterns": {
+      "multi_input_type": "simple_merge",
+      "year_mismatch": false,
+      "aggregation_required": false,
+      "merge_type": "outer",
+      "merge_keys": ["aargang", "grunnkrets", "delbydel", "bydel"],
+      "suffixes": ["_arb", "_bo"]
+    },
+    
+    "challenges_encountered": [
+      {
+        "issue": "Geografiske kolonner ikke identifisert som felles",
+        "description": "'arb_gkrets_a' (input1) og 'ny_krets_b' (input2) ble ikke sett som samme",
+        "solution_status": "solved",
+        "solution": "identify_common_keys() bruker nå standardnavnene fra mappings"
+      },
+      {
+        "issue": "Datatype-mismatch i merge",
+        "description": "aargang: int64 vs object, grunnkrets: string vs Int64",
+        "solution_status": "solved",
+        "solution": "Eksplisitt konvertering: Int64 for geo, str for aargang"
+      },
+      {
+        "issue": "Duplikate rader etter merge",
+        "description": "Merge på kun [aargang, grunnkrets] ga duplikater",
+        "solution_status": "solved",
+        "solution": "Inkludere ALLE geografiske nivåer i merge-nøkkel"
+      }
+    ],
+    
+    "code_patterns_learned": [
+      {
+        "pattern": "composite_geographic_key",
+        "code": "# Ikke bare grunnkrets - trenger alle nivåer\nmerge_keys = ['aargang', 'bydel', 'delbydel', 'grunnkrets']\ndf_merged = pd.merge(df1, df2, on=merge_keys, how='outer')"
+      },
+      {
+        "pattern": "datatype_normalization",
+        "code": "# Før merge: Normaliser datatyper\ndf['aargang'] = df['aargang'].astype(str)\ndf['grunnkrets'] = df['grunnkrets'].astype('Int64')  # Nullable int\ndf['bydel'] = df['bydel'].astype('Int64')"
+      },
+      {
+        "pattern": "nan_filtering_on_detailed_level",
+        "code": "# Fjern rader med manglende nøkkelverdier\n# Bruk mest detaljerte nivå (grunnkrets)\ndf = df.dropna(subset=['grunnkrets'])"
+      },
+      {
+        "pattern": "context_aware_geographic_naming",
+        "code": "# Input-mapper:\n# 'arb_gkrets_a' → 'arbeidssted_grunnkrets'  (kontekst: arbeidssted)\n# 'ny_krets_b' → 'bosted_grunnkrets'         (kontekst: bosted)\n# Output:\n# Begge → 'grunnkrets' (generisk, siden samme enheter)"
+      }
+    ],
+    
+    "improvements_needed": [
+      "Automatisk deteksjon av kompositt nøkler",
+      "Bedre håndtering av geografisk hierarki",
+      "Automatisk deteksjon av arbeidssted/bosted-dimensjoner"
+    ],
+    
+    "reusable_for_tables": [
+      "Andre multi-geografiske-dimensjoner tabeller",
+      "Tabeller med arbeidssted OG bosted",
+      "Tabeller med kompositt geografiske nøkler"
+    ]
+  },
+  
+  "validation": {
+    "expected_rows": 10225,
+    "actual_rows": 10225,
+    "match_rate": 1.0,
+    "perfect_match": true,
+    "verified_columns": [
+      "aargang",
+      "grunnkrets",
+      "grunnkrets_fmt",
+      "sysselsatte med arbeidssted i Oslo",
+      "sysselsatte med bosted i Oslo"
+    ]
+  },
+  
+  "files": {
+    "prep_script": "OK-SYS001_prep.py",
+    "input_1": "ok-sys001_input_1.xlsx",
+    "input_2": "ok-sys001_input_2.xlsx",
+    "output_reference": "ok-sys001_output.xlsx",
+    "output_rebuilt": "ok-sys001_rebuilt.xlsx",
+    "codelists_used": [
+      "geo_grunnkrets.json"
+    ]
+  },
+  
+  "success_factors": [
+    "Samme aargang i begge inputs (enkel merge)",
+    "Klare geografiske nøkler",
+    "Manuell korreksjon av generert script fungerte",
+    "Kompositt nøkkel løste duplikat-problemet"
+  ],
+  
+  "next_actions": [
+    "Bruk som referanse for andre multi-input tabeller med samme aargang",
+    "Implementer kompositt nøkkel-deteksjon i generate_prep_script_v2.py"
+  ]
+}

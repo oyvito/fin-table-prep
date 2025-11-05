@@ -16,6 +16,12 @@ from pathlib import Path
 from datetime import datetime
 from codelist_manager import CodelistManager
 
+# Sikre UTF-8 encoding for alle fil-operasjoner
+import locale
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 
 def similarity(a, b):
     """Beregn likhet mellom to strenger (0-1)."""
@@ -34,18 +40,72 @@ def load_training_examples():
         if not example_dir.is_dir():
             continue
         
-        # Sjekk om det finnes metadata
+        example = {
+            "table_code": example_dir.name,
+            "path": example_dir,
+            "metadata": None,
+            "learning_outcomes": None
+        }
+        
+        # Last metadata.json hvis den finnes
         metadata_file = example_dir / "metadata.json"
         if metadata_file.exists():
             with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-                examples.append({
-                    "table_code": example_dir.name,
-                    "path": example_dir,
-                    "metadata": metadata
-                })
+                example["metadata"] = json.load(f)
+        
+        # Last learning_outcomes.json hvis den finnes
+        learning_file = example_dir / "learning_outcomes.json"
+        if learning_file.exists():
+            with open(learning_file, 'r', encoding='utf-8') as f:
+                example["learning_outcomes"] = json.load(f)
+        
+        examples.append(example)
     
     return examples
+
+
+def find_similar_tables(table_code, training_examples):
+    """
+    Finn lignende tabeller basert på tabellkode og learning outcomes.
+    
+    Args:
+        table_code: Tabellkode å finne likhet med (f.eks. OK-SYS002)
+        training_examples: Liste av training examples
+    
+    Returns:
+        Liste av relevante learning outcomes
+    """
+    similar = []
+    
+    # Først: Samme tabellkategori (f.eks. OK-SYS)
+    table_category = table_code.rsplit('-', 1)[0] if '-' in table_code else None
+    
+    for example in training_examples:
+        if not example.get('learning_outcomes'):
+            continue
+        
+        learning = example['learning_outcomes']
+        
+        # Sjekk om denne tabellen er relevant
+        is_similar = False
+        
+        # 1. Samme kategori
+        if table_category and example['table_code'].startswith(table_category):
+            is_similar = True
+        
+        # 2. Eksplisitt listet som "reusable_for_tables"
+        reusable_for = learning.get('learning_outcomes', {}).get('reusable_for_tables', [])
+        if table_code in reusable_for:
+            is_similar = True
+        
+        if is_similar:
+            similar.append({
+                'table_code': example['table_code'],
+                'learning': learning,
+                'relevance': 'same_category' if table_category in example['table_code'] else 'explicit'
+            })
+    
+    return similar
 
 
 def load_kontrollskjema():
@@ -993,7 +1053,12 @@ reflekterer tabellens innhold:
 
 import pandas as pd
 import sys
+import io
 from pathlib import Path
+
+# Sikre UTF-8 encoding for print-statements
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 def normalize_column_names(df):
