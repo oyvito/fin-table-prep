@@ -205,35 +205,73 @@ def resolve_duplicate_mappings(mappings, output_cols):
     return updated_mappings
 
 
-def identify_common_keys(input_dfs, output_df=None):
+def identify_common_keys(input_dfs, output_df=None, all_mappings=None):
     """Identifiser felles nøkkelkolonner på tvers av flere input-dataframes.
 
+    VIKTIG: Bruker de foreslåtte standardnavnene fra mappings for å finne
+    felles kolonner, siden originale navn kan være forskjellige
+    (f.eks. 'arb_gkrets_a' vs 'ny_krets_b' → begge mapper til 'arbeidssted_grunnkrets')
+
     Heuristikk:
-      - Interseksjon av kolonnenavn (case-sensitive bevares, men sammenlignes lower)
+      - Konverter kolonnenavn til standardnavn (via mappings)
+      - Finn interseksjon av standardnavn (case-insensitive)
       - Ekskluder åpenbare målekolonner (antall, value, count)
       - Prioriter kolonner som virker kategoriske (dtype ikke float kontinuerlig)
       - Verifiser at nøklene sammen gir unikhet eller nær-unikhet (<5% duplikat)
 
     Args:
-        input_dfs: Liste av DataFrames
+        input_dfs: Liste av DataFrames (med originale kolonnenavn)
         output_df: Valgfri referanse for validering
+        all_mappings: Liste av mapping-dicts [{'mappings': {...}}, ...] per input
     Returns:
-        dict med 'candidate_keys': liste av kolonnenavn
+        dict med 'candidate_keys': liste av standardiserte kolonnenavn
               'key_quality': dict per kolonne med uniqueness-ratio
               'composite_uniqueness': float for samlet nøkkel
+              'original_to_standard': dict med mapping per input
     """
     if not input_dfs:
-        return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0}
+        return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0, 
+                'original_to_standard': []}
 
-    # Finn interseksjon
-    lower_sets = [set(c.lower() for c in df.columns) for df in input_dfs]
-    common_lower = set.intersection(*lower_sets)
-    if not common_lower:
-        return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0}
-
-    # Map tilbake til original case fra første DF
-    first_cols_map = {c.lower(): c for c in input_dfs[0].columns}
-    common_cols = [first_cols_map[l] for l in common_lower]
+    # Hvis ingen mappings gitt, fall tilbake til original logikk
+    if not all_mappings:
+        # Finn interseksjon av originale navn
+        lower_sets = [set(c.lower() for c in df.columns) for df in input_dfs]
+        common_lower = set.intersection(*lower_sets)
+        if not common_lower:
+            return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0,
+                   'original_to_standard': []}
+        
+        first_cols_map = {c.lower(): c for c in input_dfs[0].columns}
+        common_cols = [first_cols_map[l] for l in common_lower]
+    else:
+        # NYTT: Bruk standardnavnene fra mappings
+        standardized_cols = []
+        original_to_standard = []
+        
+        for i, (df, mapping_info) in enumerate(zip(input_dfs, all_mappings)):
+            mapping = mapping_info.get('mappings', {})
+            # Konverter alle kolonner til standardnavn (eller behold original hvis ikke mappet)
+            std_cols = [mapping.get(col, col) for col in df.columns]
+            standardized_cols.append(set(c.lower() for c in std_cols))
+            
+            # Lagre reverse mapping for denne input-filen
+            reverse_map = {std.lower(): orig for orig, std in mapping.items()}
+            original_to_standard.append(reverse_map)
+        
+        # Finn felles standardnavn
+        common_lower = set.intersection(*standardized_cols)
+        if not common_lower:
+            return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0,
+                   'original_to_standard': original_to_standard}
+        
+        # Bruk standardnavn (ta fra første mapping for konsistent case)
+        first_mapping = all_mappings[0].get('mappings', {})
+        # Reverse for å finne standardnavn
+        std_cols_map = {std.lower(): std for std in first_mapping.values()}
+        # Fallback til original hvis ikke funnet
+        first_cols_map = {c.lower(): c for c in input_dfs[0].columns}
+        common_cols = [std_cols_map.get(l, first_cols_map.get(l, l)) for l in common_lower]
 
     measure_candidates = {'antall', 'value', 'count', 'beløp', 'sum'}
     filtered = [c for c in common_cols if c.lower() not in measure_candidates]
@@ -241,27 +279,68 @@ def identify_common_keys(input_dfs, output_df=None):
     # Vurder uniqueness per kolonne (gjør på første DF for hastighet)
     key_quality = {}
     df0 = input_dfs[0]
-    for c in filtered:
-        nunique = df0[c].nunique(dropna=True)
-        ratio = nunique / max(len(df0), 1)
-        key_quality[c] = ratio
+    
+    for std_col in filtered:
+        # Finn original kolonnenavn i første DF
+        if all_mappings:
+            mapping = all_mappings[0].get('mappings', {})
+            # Finn original kolonne som mapper til std_col
+            orig_col = None
+            for orig, std in mapping.items():
+                if std.lower() == std_col.lower():
+                    orig_col = orig
+                    break
+            if not orig_col:
+                orig_col = std_col  # Fallback
+        else:
+            orig_col = std_col
+        
+        if orig_col in df0.columns:
+            nunique = df0[orig_col].nunique(dropna=True)
+            ratio = nunique / max(len(df0), 1)
+            key_quality[std_col] = ratio
+        else:
+            key_quality[std_col] = 0.0
 
     # Start med kolonner med ratio > 0.2 (ikke helt lav-kardinalitet)
-    candidate = [c for c in filtered if key_quality[c] > 0.2]
+    candidate = [c for c in filtered if key_quality.get(c, 0) > 0.2]
     if not candidate:
         candidate = filtered  # fall back
 
     # Test composite uniqueness
     composite_uniqueness = 0.0
-    if candidate:
-        subset = df0[candidate]
-        composite_uniqueness = subset.drop_duplicates().shape[0] / max(len(df0), 1)
+    if candidate and all_mappings:
+        # Finn originale kolonner for composite test
+        mapping = all_mappings[0].get('mappings', {})
+        orig_cols = []
+        for std_col in candidate:
+            for orig, std in mapping.items():
+                if std.lower() == std_col.lower():
+                    orig_cols.append(orig)
+                    break
+            else:
+                orig_cols.append(std_col)  # Fallback
+        
+        valid_cols = [c for c in orig_cols if c in df0.columns]
+        if valid_cols:
+            subset = df0[valid_cols]
+            composite_uniqueness = subset.drop_duplicates().shape[0] / max(len(df0), 1)
+    elif candidate:
+        valid_cols = [c for c in candidate if c in df0.columns]
+        if valid_cols:
+            subset = df0[valid_cols]
+            composite_uniqueness = subset.drop_duplicates().shape[0] / max(len(df0), 1)
 
-    return {
+    result = {
         'candidate_keys': candidate,
         'key_quality': key_quality,
         'composite_uniqueness': composite_uniqueness
     }
+    
+    if all_mappings:
+        result['original_to_standard'] = original_to_standard
+    
+    return result
 
 
 def detect_variable_pairs(df):
@@ -713,9 +792,10 @@ def generate_multi_input_script(input_files, output_file, table_code,
         print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
 
     # 1) Multi-input struktur: identifiser felles nøkler
-    common_keys_info = identify_common_keys(input_dfs, df_output)
+    # VIKTIG: Sender med mappings slik at vi finner felles kolonner basert på STANDARDNAVN
+    common_keys_info = identify_common_keys(input_dfs, df_output, all_mappings)
     print("=== Multi-input nøkkelanalyse ===")
-    print(f"Foreslåtte felles nøkkelkolonner: {common_keys_info['candidate_keys']}")
+    print(f"Foreslåtte felles nøkkelkolonner (standardnavn): {common_keys_info['candidate_keys']}")
     print(f"Unikhetsratio per kolonne: {common_keys_info['key_quality']}")
     print(f"Kompositt unikhet (approx): {common_keys_info['composite_uniqueness']:.3f}\n")
 
@@ -871,6 +951,15 @@ import sys
 from pathlib import Path
 
 
+def normalize_column_names(df):
+    """
+    Normaliser kolonnenavn til lowercase for å unngå case-sensitivity problemer.
+    Eksempel: 'KJOENN' → 'kjoenn', 'Aargang' → 'aargang'
+    """
+    df.columns = df.columns.str.lower()
+    return df
+
+
 def load_codelists():
     """Last inn relevante kodelister."""
     import json
@@ -913,11 +1002,12 @@ def transform_data('''
     
 '''
     
-    # Les input-filer
+    # Les input-filer og normaliser kolonnenavn
     for i in range(num_inputs):
         script += f'''    # Les input fil {i+1}
     print(f"Leser {{input_file{i+1}}}...")
     df{i+1} = pd.read_excel(input_file{i+1})
+    df{i+1} = normalize_column_names(df{i+1})  # Normaliser til lowercase
     print(f"  {{len(df{i+1})}} rader, {{len(df{i+1}.columns)}} kolonner")
     
 '''
@@ -927,7 +1017,10 @@ def transform_data('''
         mappings = mapping_info['mappings']
         transformations = all_transformations[i-1]
         
-        if mappings:
+        # Konverter mappings til lowercase (siden vi normaliserer kolonnenavn til lowercase)
+        mappings_lower = {k.lower(): v for k, v in mappings.items()}
+        
+        if mappings_lower:
             script += f'''    # Transformer data fra input {i}
     df{i}_transformed = df{i}.copy()
     
@@ -935,11 +1028,11 @@ def transform_data('''
             
             # Kolonnenavn-endringer (inkluder ALLE mappings først)
             # Kodeliste-transformasjoner håndteres separat etterpå
-            if mappings:
+            if mappings_lower:
                 script += f'''    # Endre kolonnenavn
     df{i}_transformed = df{i}_transformed.rename(columns={{
 '''
-                for old_col, new_col in mappings.items():
+                for old_col, new_col in mappings_lower.items():
                     script += f'''        '{old_col}': '{new_col}',
 '''
                 script += '''    })
