@@ -1,0 +1,177 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-11-05",
+  "description": "Kontrollskjema for standardisering av tabeller i statistikkbanken",
+  
+  "standard_variables": {
+    "år": {
+      "required_name": "år",
+      "description": "Årstall for statistikken",
+      "data_type": "integer",
+      "alternative_names": ["årgang", "År", "year", "periode"],
+      "validation": {
+        "min": 1900,
+        "max": 2100,
+        "format": "YYYY"
+      },
+      "notes": "Alltid med små bokstaver. Fire sifre."
+    },
+    
+    "geografi": {
+      "required_name": "geografi",
+      "description": "Geografisk enhet (bydel, grunnkrets, etc.)",
+      "data_type": "string",
+      "alternative_names": ["bydel", "område", "region", "geo"],
+      "codelists": ["SSB_til_PX_geo_bydel", "SSB_til_PX_geo_kommune", "SSB_til_PX_geo_grunnkrets"],
+      "notes": "Bruk PX-kode fra kodelister. Legg til separat navn-kolonne hvis nødvendig."
+    },
+    
+    "kjønn": {
+      "required_name": "kjønn",
+      "description": "Kjønn",
+      "data_type": "string",
+      "alternative_names": ["kjonn", "Kjønn", "gender", "sex"],
+      "allowed_values": {
+        "0": "Alle",
+        "1": "Menn",
+        "2": "Kvinner"
+      },
+      "notes": "Standard SSB-koding. Alltid små bokstaver i variabelnavn."
+    },
+    
+    "alder": {
+      "required_name": "alder",
+      "description": "Alder eller aldersgruppe",
+      "data_type": "string",
+      "alternative_names": ["Alder", "age", "aldersgruppe"],
+      "notes": "Bruk format '0-5', '6-12', etc. for grupper. Enkeltår som '25'."
+    },
+    
+    "antall": {
+      "required_name": "antall",
+      "description": "Antall observasjoner/personer",
+      "data_type": "integer",
+      "alternative_names": ["Antall", "count", "n", "sum"],
+      "notes": "Alltid små bokstaver. Heltall."
+    },
+    
+    "andel": {
+      "required_name": "andel",
+      "description": "Andel i prosent",
+      "data_type": "float",
+      "alternative_names": ["Andel", "prosent", "pct", "percentage"],
+      "validation": {
+        "min": 0,
+        "max": 100,
+        "decimals": 1
+      },
+      "notes": "Alltid i prosent (0-100), ikke desimal (0-1). Én desimal."
+    }
+  },
+  
+  "geographic_coding": {
+    "description": "Krav til geografisk koding for PxWeb",
+    "rules": [
+      "Bruk alltid PX-koder fra kodelister, ikke SSB-koder direkte",
+      "Inkluder både kode og navn i separate kolonner hvis mulig",
+      "For TKNR: Bruk NAV_TKNR_til_PX kodeliste",
+      "For SSB-koder: Bruk riktig SSB_til_PX_geo_* kodeliste"
+    ],
+    
+    "required_codelists": {
+      "kommune": "SSB_til_PX_geo_kommune",
+      "bydel": "SSB_til_PX_geo_bydel",
+      "delbydel": "SSB_til_PX_geo_delbydel",
+      "grunnkretsområde": "SSB_til_PX_geo_grunnkretsområde",
+      "grunnkrets": "SSB_til_PX_geo_grunnkrets",
+      "tknr": "NAV_TKNR_til_PX"
+    },
+    
+    "naming_convention": {
+      "code_column": "geografi_kode eller [nivå]_kode (f.eks. bydel_kode)",
+      "label_column": "geografi_navn eller [nivå]_navn (f.eks. bydel_navn)"
+    }
+  },
+  
+  "naming_conventions": {
+    "general_rules": [
+      "Alle variabelnavn skal være små bokstaver",
+      "Bruk understrek (_) for å skille ord, ikke mellomrom eller bindestrek",
+      "Norske tegn (æ, ø, å) er tillatt i variabelnavn",
+      "Vær konsistent med eksisterende tabeller"
+    ],
+    
+    "forbidden_patterns": [
+      "Mellomrom i variabelnavn",
+      "Store bokstaver (unntatt akronymer som faste verdier)",
+      "Bindestrek (-) i variabelnavn",
+      "Spesialtegn unntatt understrek (_)"
+    ]
+  },
+  
+  "data_quality": {
+    "missing_values": {
+      "numeric": null,
+      "text": "",
+      "notes": "Bruk null/NaN for manglende tallverdier, tom streng for tekst"
+    },
+    
+    "decimal_separator": ".",
+    "thousands_separator": "",
+    "date_format": "YYYY-MM-DD",
+    
+    "validation_rules": [
+      "Alle geografiske koder må finnes i kodelister",
+      "Prosentverdier må være 0-100",
+      "Årstall må være realistiske (1900-2100)",
+      "Ingen duplikate rader (samme kombinasjon av nøkkelvariabler)"
+    ]
+  },
+  
+  "table_structure": {
+    "required_columns": {
+      "description": "Kolonner som alltid bør være med hvis relevant",
+      "columns": ["år", "geografi"]
+    },
+    
+    "column_order": {
+      "description": "Anbefalt rekkefølge på kolonner",
+      "order": [
+        "år",
+        "geografi_kode",
+        "geografi_navn",
+        "kjønn",
+        "alder",
+        "kategori_variabler",
+        "antall",
+        "andel"
+      ]
+    }
+  },
+  
+  "domain_specific": {
+    "befolkning": {
+      "standard_variables": ["år", "geografi", "kjønn", "alder", "antall"],
+      "notes": "Befolkningsstatistikk følger SSB-standard"
+    },
+    
+    "sysselsetting": {
+      "standard_variables": ["år", "geografi", "kjønn", "alder", "antall_sysselsatte", "antall_befolkning", "sysselsettingsandel"],
+      "calculation": "sysselsettingsandel = (antall_sysselsatte / antall_befolkning) * 100",
+      "notes": "Krever join mellom sysselsettings- og befolkningsdata"
+    },
+    
+    "utdanning": {
+      "standard_variables": ["år", "geografi", "kjønn", "alder", "utdanningsnivå", "antall"],
+      "notes": "Utdanningsnivå følger NUS-koding"
+    }
+  },
+  
+  "changelog": [
+    {
+      "date": "2025-11-05",
+      "version": "1.0",
+      "changes": "Initielt kontrollskjema opprettet"
+    }
+  ]
+}

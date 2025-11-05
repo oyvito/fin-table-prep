@@ -3,6 +3,7 @@ Forbedret versjon av generate_prep_script.py
 - Støtter flere input-filer (for joins/beregninger)
 - Integrerer kodeliste-systemet
 - Lærer fra eksisterende eksempler i training_data/
+- Bruker kontrollskjema for standardisering
 """
 
 import pandas as pd
@@ -47,19 +48,52 @@ def load_training_examples():
     return examples
 
 
+def load_kontrollskjema():
+    """Last inn kontrollskjema for standardisering."""
+    kontrollskjema_path = Path("kontrollskjema.json")
+    if kontrollskjema_path.exists():
+        with open(kontrollskjema_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return None
+
+
 def find_column_mapping_with_codelists(df_input, df_output, codelist_manager, 
-                                      similarity_threshold=0.6):
+                                      kontrollskjema=None, similarity_threshold=0.6):
     """
-    Finn kolonnemappings mellom input og output, med kodeliste-støtte.
+    Finn kolonnemappings mellom input og output, med kodeliste-støtte og standardisering.
     """
     input_cols = df_input.columns.tolist()
     output_cols = df_output.columns.tolist()
     
     mappings = {}
     value_transformations = {}  # Kodeliste-transformasjoner
+    standardization_suggestions = {}  # Forslag til standardisering
     used_output_cols = set()
     
-    # 1. Eksakte match først
+    # Last standard variabler fra kontrollskjema
+    standard_vars = {}
+    if kontrollskjema:
+        standard_vars = kontrollskjema.get('standard_variables', {})
+    
+    # 1. Sjekk mot kontrollskjema først
+    if standard_vars:
+        for in_col in input_cols:
+            in_col_lower = in_col.lower().strip()
+            
+            # Sjekk om input-kolonne matcher standard variabel eller alternativt navn
+            for std_name, std_info in standard_vars.items():
+                alt_names = [name.lower() for name in std_info.get('alternative_names', [])]
+                
+                if in_col_lower == std_name or in_col_lower in alt_names:
+                    # Se om output har standard-navnet
+                    if std_name in output_cols:
+                        mappings[in_col] = std_name
+                        used_output_cols.add(std_name)
+                        if in_col != std_name:
+                            standardization_suggestions[in_col] = std_name
+                        break
+    
+    # 2. Eksakte match (for kolonner ikke fanget av kontrollskjema)
     for in_col in input_cols:
         in_col_clean = in_col.lower().strip().replace(' ', '').replace('_', '')
         for out_col in output_cols:
@@ -144,7 +178,7 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     unmapped_input = [col for col in input_cols if col not in mappings]
     unmapped_output = [col for col in output_cols if col not in used_output_cols]
     
-    return mappings, value_transformations, unmapped_input, unmapped_output
+    return mappings, value_transformations, standardization_suggestions, unmapped_input, unmapped_output
 
 
 def generate_multi_input_script(input_files, output_file, table_code, 
@@ -162,6 +196,9 @@ def generate_multi_input_script(input_files, output_file, table_code,
     
     # Last kodelister
     codelist_mgr = CodelistManager()
+    
+    # Last kontrollskjema
+    kontrollskjema = load_kontrollskjema()
     
     # Last treningseksempler
     training_examples = load_training_examples()
@@ -185,10 +222,11 @@ def generate_multi_input_script(input_files, output_file, table_code,
     # Analyser mappings for hver input-fil
     all_mappings = []
     all_transformations = []
+    all_standardizations = []
     
     for i, df_input in enumerate(input_dfs):
-        mappings, transformations, unmapped_in, unmapped_out = \
-            find_column_mapping_with_codelists(df_input, df_output, codelist_mgr)
+        mappings, transformations, standardizations, unmapped_in, unmapped_out = \
+            find_column_mapping_with_codelists(df_input, df_output, codelist_mgr, kontrollskjema)
         
         all_mappings.append({
             'file_index': i,
@@ -198,10 +236,13 @@ def generate_multi_input_script(input_files, output_file, table_code,
         })
         
         all_transformations.append(transformations)
+        all_standardizations.append(standardizations)
         
         print(f"=== Input fil {i+1} ===")
         print(f"Mappings funnet: {len(mappings)}")
         print(f"Kodeliste-transformasjoner: {len(transformations)}")
+        if standardizations:
+            print(f"Standardiserings-forslag: {standardizations}")
         print(f"Umappede input-kolonner: {unmapped_in}")
         print(f"Umappede output-kolonner: {unmapped_out}\n")
     
