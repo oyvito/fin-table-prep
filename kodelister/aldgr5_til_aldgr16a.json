@@ -1,0 +1,26 @@
+{
+  "name": "aldgr5_til_aldgr16a",
+  "description": "Mapping fra 5-års aldersgrupper (befolkning) til bredere aldersgrupper brukt i sysselsettingsstatistikk",
+  "source": "Domenekunnskapsanalyse OK-SYS002",
+  "created": "2025-11-05",
+  "mappings": {
+    "15 - 19 år": "15-24 år",
+    "20 - 24 år": "15-24 år",
+    "25 - 29 år": "25-39 år",
+    "30 - 34 år": "25-39 år",
+    "35 - 39 år": "25-39 år",
+    "40 - 44 år": "40-49 år",
+    "45 - 49 år": "40-49 år",
+    "50 - 54 år": "50-59 år",
+    "55 - 59 år": "50-59 år",
+    "60 - 64 år": "60-74 år",
+    "65 - 69 år": "60-74 år",
+    "70 - 74 år": "60-74 år",
+    "Alder i alt": "Alder i alt"
+  },
+  "notes": [
+    "Sysselsettingsdata bruker brede 10+ års aldersgrupper",
+    "Befolkningsdata bruker smale 5-års aldersgrupper",
+    "For andelsberegning må befolkningsdata aggregeres til sysselsatte's grupper"
+  ]
+}
