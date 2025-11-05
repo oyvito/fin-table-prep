@@ -82,6 +82,23 @@ df['utdanning_navn'] = df['utdanning_fmt']  # Bruk _fmt som navn
 
 **Resultat:** Behold begge, bare endre kolonnenavn til standard.
 
+### 💡 ML-læring over tid:
+
+Etter hvert som systemet ser flere eksempler, vil det lære at:
+
+**Variabler som KUN trenger navn (ikke kode):**
+- `kjønn` → Output: Kun "Mann"/"Kvinne"/"Begge kjønn"
+- `alder` → Output: Kun "15-24 år", "25-39 år" osv.
+- `utdanning` → Output: Kun "Videregående", "Universitets-/høgskole" osv.
+
+**Variabler som ALLTID trenger kode:**
+- Geografiske (PxWeb-krav)
+- Variabler brukt i joins
+- Variabler brukt i filtre/aggregeringer
+
+**Midlertidig tilnærming (før ML er trent):**
+Behold begge for å være trygg. Når du ser at kode-kolonnen aldri brukes i output, dokumenter dette i `metadata.json` slik at modellen kan lære.
+
 ---
 
 ## ⚠️ XML-encoding

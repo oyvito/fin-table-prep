@@ -205,6 +205,117 @@ def resolve_duplicate_mappings(mappings, output_cols):
     return updated_mappings
 
 
+def identify_common_keys(input_dfs, output_df=None):
+    """Identifiser felles nøkkelkolonner på tvers av flere input-dataframes.
+
+    Heuristikk:
+      - Interseksjon av kolonnenavn (case-sensitive bevares, men sammenlignes lower)
+      - Ekskluder åpenbare målekolonner (antall, value, count)
+      - Prioriter kolonner som virker kategoriske (dtype ikke float kontinuerlig)
+      - Verifiser at nøklene sammen gir unikhet eller nær-unikhet (<5% duplikat)
+
+    Args:
+        input_dfs: Liste av DataFrames
+        output_df: Valgfri referanse for validering
+    Returns:
+        dict med 'candidate_keys': liste av kolonnenavn
+              'key_quality': dict per kolonne med uniqueness-ratio
+              'composite_uniqueness': float for samlet nøkkel
+    """
+    if not input_dfs:
+        return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0}
+
+    # Finn interseksjon
+    lower_sets = [set(c.lower() for c in df.columns) for df in input_dfs]
+    common_lower = set.intersection(*lower_sets)
+    if not common_lower:
+        return {'candidate_keys': [], 'key_quality': {}, 'composite_uniqueness': 0.0}
+
+    # Map tilbake til original case fra første DF
+    first_cols_map = {c.lower(): c for c in input_dfs[0].columns}
+    common_cols = [first_cols_map[l] for l in common_lower]
+
+    measure_candidates = {'antall', 'value', 'count', 'beløp', 'sum'}
+    filtered = [c for c in common_cols if c.lower() not in measure_candidates]
+
+    # Vurder uniqueness per kolonne (gjør på første DF for hastighet)
+    key_quality = {}
+    df0 = input_dfs[0]
+    for c in filtered:
+        nunique = df0[c].nunique(dropna=True)
+        ratio = nunique / max(len(df0), 1)
+        key_quality[c] = ratio
+
+    # Start med kolonner med ratio > 0.2 (ikke helt lav-kardinalitet)
+    candidate = [c for c in filtered if key_quality[c] > 0.2]
+    if not candidate:
+        candidate = filtered  # fall back
+
+    # Test composite uniqueness
+    composite_uniqueness = 0.0
+    if candidate:
+        subset = df0[candidate]
+        composite_uniqueness = subset.drop_duplicates().shape[0] / max(len(df0), 1)
+
+    return {
+        'candidate_keys': candidate,
+        'key_quality': key_quality,
+        'composite_uniqueness': composite_uniqueness
+    }
+
+
+def detect_variable_pairs(df):
+    """Finn variabel-par (kode + tekst) som representerer samme konsept.
+
+    Mønster:
+      - Kolonnenavn med suffix _fmt
+      - Kolonnenavn med .1 variant
+      - Kolonnenavn der basekolonnen er numerisk og variant er tekst
+
+    Returnerer liste av dicts:
+      {'base': 'alder', 'label': 'alder.1', 'pattern': '.1_variant'}
+    """
+    cols = df.columns.tolist()
+    pairs = []
+    used = set()
+    for c in cols:
+        cl = c.lower()
+        # _fmt mønster
+        if cl.endswith('_fmt'):
+            base = c[:-4]
+            if base in df.columns and base not in used and c not in used:
+                # Avslappet heuristikk: sjekk en-til-en mellom base og label
+                subset = df[[base, c]].dropna().drop_duplicates()
+                base_unique = df[base].nunique(dropna=True)
+                label_unique = df[c].nunique(dropna=True)
+                pair_unique = subset.shape[0]
+                # En-til-en hvis alle tre tall er like
+                if base_unique == label_unique == pair_unique:
+                    pairs.append({'base': base, 'label': c, 'pattern': '_fmt'})
+                    used.update({base, c})
+                    continue
+                # Alternativ: base er numerisk og label er tekst (original betingelse)
+                if not pd.api.types.is_string_dtype(df[base]) and pd.api.types.is_string_dtype(df[c]):
+                    pairs.append({'base': base, 'label': c, 'pattern': '_fmt'})
+                    used.update({base, c})
+        # .1 variant
+        if c.endswith('.1'):
+            base = c[:-2]
+            if base in df.columns and base not in used and c not in used:
+                subset = df[[base, c]].dropna().drop_duplicates()
+                base_unique = df[base].nunique(dropna=True)
+                label_unique = df[c].nunique(dropna=True)
+                pair_unique = subset.shape[0]
+                if base_unique == label_unique == pair_unique:
+                    pairs.append({'base': base, 'label': c, 'pattern': '.1_variant'})
+                    used.update({base, c})
+                    continue
+                if not pd.api.types.is_string_dtype(df[base]) and pd.api.types.is_string_dtype(df[c]):
+                    pairs.append({'base': base, 'label': c, 'pattern': '.1_variant'})
+                    used.update({base, c})
+    return pairs
+
+
 def detect_aggregation_patterns(df_input, df_output, mappings):
     """Detekter typiske aggregeringsmønstre mellom input og output.
 
@@ -601,7 +712,27 @@ def generate_multi_input_script(input_files, output_file, table_code,
         print(f"Umappede input-kolonner: {result['unmapped_input']}")
         print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
 
-    # Detekter aggregeringsmønstre for første input-fil (enkleste antakelse)
+    # 1) Multi-input struktur: identifiser felles nøkler
+    common_keys_info = identify_common_keys(input_dfs, df_output)
+    print("=== Multi-input nøkkelanalyse ===")
+    print(f"Foreslåtte felles nøkkelkolonner: {common_keys_info['candidate_keys']}")
+    print(f"Unikhetsratio per kolonne: {common_keys_info['key_quality']}")
+    print(f"Kompositt unikhet (approx): {common_keys_info['composite_uniqueness']:.3f}\n")
+
+    # 2) Variabel-par deteksjon per input
+    variable_pairs_all = []
+    for i, df_in in enumerate(input_dfs, 1):
+        pairs = detect_variable_pairs(df_in)
+        variable_pairs_all.append(pairs)
+        if pairs:
+            print(f"Variabel-par funnet i input {i}:")
+            for p in pairs:
+                print(f"  - {p['base']} / {p['label']} ({p['pattern']})")
+        else:
+            print(f"Ingen variabel-par funnet i input {i}")
+        print()
+
+    # 3) Aggregeringsanalyse (bruk første input som referanse)
     aggregation_insights = []
     if input_dfs:
         try:
@@ -619,7 +750,8 @@ def generate_multi_input_script(input_files, output_file, table_code,
     
     script_content = generate_script_content_multi_input(
         input_files, all_mappings, all_transformations, all_geographic_suggestions,
-        aggregation_insights, df_output.columns.tolist(), table_code
+        aggregation_insights, df_output.columns.tolist(), table_code,
+        common_keys_info, variable_pairs_all
     )
     
     with open(script_name, 'w', encoding='utf-8') as f:
@@ -634,7 +766,8 @@ def generate_multi_input_script(input_files, output_file, table_code,
 
 def generate_script_content_multi_input(input_files, all_mappings, 
                                        all_transformations, all_geographic_suggestions,
-                                       aggregation_insights, output_columns, table_code):
+                                       aggregation_insights, output_columns, table_code,
+                                       common_keys_info=None, variable_pairs_all=None):
     """Generer selve Python-scriptet for multi-input transformasjon.
 
     Args:
@@ -682,7 +815,37 @@ def generate_script_content_multi_input(input_files, all_mappings,
                     agg_comment_lines.append(commented_snippet)
 
     aggregation_comment_block = "\n".join(agg_comment_lines) if agg_comment_lines else ""
-    
+
+    # Bygg kommentarblokker for felles nøkler og variabel-par
+    common_keys_block = ""
+    if common_keys_info is not None:
+        ck = common_keys_info.get('candidate_keys', [])
+        uq = common_keys_info.get('composite_uniqueness', 0.0)
+        key_quality = common_keys_info.get('key_quality', {})
+        if ck:
+            quality_lines = [f"    - {k}: uniqueness={key_quality.get(k,0):.3f}" for k in ck]
+            common_keys_block = (
+                "\nMULTI-INPUT NØKLER:\n" +
+                f"  Felles nøkkelkolonner (foreslått): {ck}\n" +
+                f"  Kompositt unikhet (≈): {uq:.3f}\n" +
+                "  Kolonnekvalitet:\n" +
+                "\n".join(quality_lines)
+            )
+        else:
+            common_keys_block = "\nMULTI-INPUT NØKLER:\n  Ingen felles kolonner identifisert automatisk – vurder manuelt."
+
+    variable_pairs_block = ""
+    if variable_pairs_all is not None:
+        lines = []
+        for i, pairs in enumerate(variable_pairs_all, 1):
+            if not pairs:
+                lines.append(f"  Input {i}: Ingen variabel-par funnet")
+            else:
+                lines.append(f"  Input {i}:")
+                for p in pairs:
+                    lines.append(f"    - base={p['base']} label={p['label']} pattern={p['pattern']}")
+        variable_pairs_block = "\nVARIABEL-PAR (kode+tekst):\n" + "\n".join(lines)
+
     script = f'''"""
 Prep-script for {table_code}
 Generert: {timestamp}
@@ -699,6 +862,8 @@ reflekterer tabellens innhold:
 - geografi: Generisk når kontekst er uklar
 {geo_comment_block}
 {aggregation_comment_block}
+{common_keys_block}
+{variable_pairs_block}
 """
 
 import pandas as pd
@@ -810,28 +975,39 @@ def transform_data('''
 '''
     
     script += f'''    
-    # TODO: Kombiner data fra flere input-filer
-    # Eksempel joins, beregninger, etc.
+    # MULTI-INPUT FUSJON / UNION
+    # Hvis flere input-filer: bygg union/merge basert på felles nøkkelkolonner.
     '''
     
     if num_inputs > 1:
-        script += f'''
-    # Eksempel på join:
-    # df_combined = df1_transformed.merge(
-    #     df2_transformed, 
-    #     on=['felles_kolonne'], 
-    #     how='left'
-    # )
-    
-    # Eksempel på beregning (sysselsettingsandel):
-    # df_combined['sysselsettingsandel'] = (
-    #     df_combined['antall_sysselsatte'] / df_combined['befolkning'] * 100
-    # )
-    '''
+        # Hent foreslåtte felles nøkler
+        common_keys = []
+        if common_keys_info and common_keys_info.get('candidate_keys'):
+            common_keys = common_keys_info.get('candidate_keys')
+        script += "\n    # Foreslåtte felles nøkkelkolonner: " + str(common_keys) + "\n"
+        script += "    if not " + str(common_keys) + ":\n"
+        script += "        print(\"⚠️ Ingen automatiske felles nøkler funnet – vurder manuell merge.\")\n"
+        script += "    else:\n"
+        script += "        # Verifiser tilstedeværelse i alle datasett\n"
+        for i in range(1, num_inputs+1):
+            script += f"        missing_{i} = [k for k in {common_keys} if k not in df{i}_transformed.columns]\n"
+            script += f"        if missing_{i}: print(\"⚠️ Input {i} mangler kolonner:\", missing_{i})\n"
+        # Start med første dataframe
+        script += "        df_merged = df1_transformed.copy()\n"
+        for i in range(2, num_inputs+1):
+            script += f"        df_merged = df_merged.merge(df{i}_transformed, on={common_keys}, how='outer')\n"
+        script += "\n        # Hvis duplikater oppstår (samme nøkkel flere ganger), aggreger målekolonner ved sum\n"
+        script += "        measure_cols = [c for c in df_merged.columns if c.lower().startswith('sysselsatte') or c.lower() in ['antall','value','count']]\n"
+        script += "        if df_merged.shape[0] > df_merged.drop_duplicates(subset=" + str(common_keys) + ").shape[0]:\n"
+        script += "            df_merged = df_merged.groupby(" + str(common_keys) + ", dropna=False)[measure_cols].sum().reset_index()\n"
+        script += "\n        # Sett df_final til merged resultat\n        df_final_candidate = df_merged\n"
+    else:
+        script += "\n    # Enkelt input – df_final_candidate settes til første transformerte dataframe\n"
+        script += "    df_final_candidate = df1_transformed\n"
     
     script += f'''
     # TODO: Velg endelig datasett
-    df_final = df1_transformed  # ENDRE DETTE
+    df_final = df_final_candidate  # Kan justeres manuelt ved behov
     
     # Velg og sorter output-kolonner
     output_columns = {output_columns}

@@ -17,7 +17,12 @@
     "codelists_used": ["geo_bydel", "nav_tknr"],
     "calculations": ["andel", "sum", "gjennomsnitt"],
     "joins": true,
-    "aggregations": false
+    "aggregations": false,
+    "code_vs_label_usage": {
+      "only_labels": ["kjønn", "alder"],
+      "both_needed": ["geografi"],
+      "note": "Dokumenter hvilke variabler som kun trenger navn vs. både kode og navn"
+    }
   },
   "challenges": [
     "Beskriv eventuelle utfordringer eller spesielle tilfeller"

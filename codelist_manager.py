@@ -37,7 +37,7 @@ class CodelistManager:
         Finn kodeliste som matcher source/target kolonner.
         
         Sjekker:
-        1. Kolonnenavn-mønstre
+        1. Kolonnenavn-mønstre (MÅ matche for geografiske kodelister)
         2. Overlap i verdier
         """
         best_match = None
@@ -45,18 +45,36 @@ class CodelistManager:
         
         for name, codelist in self.codelists.items():
             score = 0
+            column_name_match = False
             
             # Sjekk kolonnenavn-mønstre
             source_patterns = codelist.get('source_column_patterns', [])
             target_patterns = codelist.get('target_column_patterns', [])
             
+            # For geografiske kodelister: Sjekk om kolonnennavn inneholder geografiske hint
+            geo_keywords_in_source = any(word in source_col.lower() for word in ['bydel', 'krets', 'geo', 'område'])
+            geo_keywords_in_target = any(word in target_col.lower() for word in ['bydel', 'krets', 'geo', 'område', 'bosted', 'arbeidssted'])
+            
             for pattern in source_patterns:
                 if re.search(pattern, source_col, re.IGNORECASE):
                     score += 2
+                    column_name_match = True
             
             for pattern in target_patterns:
                 if re.search(pattern, target_col, re.IGNORECASE):
                     score += 2
+                    column_name_match = True
+            
+            # Alternativ matching: Geografiske nøkkelord i kolonnenavn + geografisk kodeliste
+            is_geo_codelist = 'geo' in name.lower() or 'bydel' in name.lower() or 'krets' in name.lower()
+            if is_geo_codelist and (geo_keywords_in_source or geo_keywords_in_target):
+                column_name_match = True
+                score += 1  # Bonus for geografisk hint
+            
+            # For geografiske kodelister: KREV kolonnenavn-match
+            # Dette forhindrer at "kjoenn" matcher "geo_bydel" bare pga. tallverdier
+            if is_geo_codelist and not column_name_match:
+                continue  # Skip denne kodelisten hvis kolonnenavn ikke matcher
             
             # Sjekk overlap i faktiske verdier
             mappings = codelist.get('mappings', {})
