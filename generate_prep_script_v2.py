@@ -586,6 +586,83 @@ df_oslo['{geo_name_col}'] = '0301 Oslo i alt'
     return results
 
 
+def detect_aggregation_patterns_v2(df_input, df_output, mappings):
+    """
+    Navne-uavhengig aggregeringsdeteksjon (forbedret versjon).
+    
+    Bruker mappings fra kolonnemapping i stedet for fuzzy matching.
+    Klassifiserer basert på verdimønstre, ikke kolonnenavn.
+    
+    Args:
+        df_input: Input DataFrame
+        df_output: Output DataFrame  
+        mappings: Dict {input_col: output_col}
+    
+    Returns:
+        dict: {'aggregations': [{'column': ..., 'type': ..., ...}, ...]}
+    """
+    aggregations = []
+    
+    # Bruk mappings direkte - NAVNE-UAVHENGIG!
+    for col_in, col_out in mappings.items():
+        # Skip label-kolonner
+        if col_in.endswith('_fmt') or '.1' in col_out or '.2' in col_out:
+            continue
+        
+        # Kun kolonner med lav kardinalitet
+        if df_output[col_out].nunique() > 50:
+            continue
+        
+        # Sammenlign verdier
+        vals_in = set(df_input[col_in].dropna().astype(str).unique())
+        vals_out = set(df_output[col_out].dropna().astype(str).unique())
+        
+        new_vals = vals_out - vals_in
+        
+        if new_vals:
+            # Klassifiser basert på verdimønstre
+            num_input = len(vals_in)
+            num_new = len(new_vals)
+            
+            # Heuristikk 1: Binær dimensjon som får én ny verdi
+            if num_input == 2 and num_new == 1:
+                agg_type = 'binary_total'
+                description = 'Binær aggregering (2→3): Trolig "Total/Begge" kategori'
+            
+            # Heuristikk 2: Geografisk kode som forkortes
+            elif all(len(str(v)) <= 3 for v in new_vals) and all(len(str(v)) > 3 for v in vals_in):
+                agg_type = 'geography_rollup'
+                description = 'Geografisk aggregering: Detaljert nivå → Totalnivå'
+            
+            # Heuristikk 3: Mange input-verdier, få nye
+            elif num_input > 10 and num_new < 5:
+                agg_type = 'category_grouping'
+                description = f'Kategori-gruppering: {num_input} verdier → {len(vals_out)} (inkl. {num_new} aggregerte)'
+            
+            # Fallback: Navn-basert
+            elif 'kjønn' in col_out.lower() or 'kjonn' in col_out.lower():
+                agg_type = 'gender'
+                description = 'Kjønnsaggregering (Begge kjønn)'
+            elif any(g in col_out.lower() for g in ['geo', 'bydel', 'bosted', 'arbeidssted']):
+                agg_type = 'geography'
+                description = 'Geografisk aggregering'
+            else:
+                agg_type = 'other'
+                description = f'Aggregering i {col_out}'
+            
+            aggregations.append({
+                'column': col_out,
+                'input_column': col_in,
+                'new_values': sorted(new_vals),
+                'type': agg_type,
+                'description': description,
+                'input_values': sorted(vals_in),
+                'output_values': sorted(vals_out)
+            })
+    
+    return {'aggregations': aggregations}
+
+
 def find_column_mapping_with_codelists(df_input, df_output, codelist_manager, 
                                       kontrollskjema=None, table_code=None, similarity_threshold=0.6,
                                       known_pairs=None):
@@ -917,18 +994,31 @@ def generate_multi_input_script(input_files, output_file, table_code,
     print(f"Unikhetsratio per kolonne: {common_keys_info['key_quality']}")
     print(f"Kompositt unikhet (approx): {common_keys_info['composite_uniqueness']:.3f}\n")
 
-    # FASE 4: Aggregeringsanalyse (bruk første input som referanse)
+    # FASE 4: Aggregeringsanalyse (navne-uavhengig deteksjon)
     aggregation_insights = []
     if input_dfs:
         try:
-            agg_result = detect_aggregation_patterns(input_dfs[0], df_output, all_mappings[0]['mappings'])
+            # Bruk den forbedrede interne versjonen
+            agg_result = detect_aggregation_patterns_v2(input_dfs[0], df_output, all_mappings[0]['mappings'])
             aggregation_insights.append(agg_result)
-            if agg_result['suggested_operations']:
-                print("🔍 Oppdaget mulige aggregeringsmønstre:")
-                for op in agg_result['suggested_operations']:
-                    print(f"  - {op['description']}")
+            
+            if agg_result['aggregations']:
+                print("🔍 Oppdaget aggregeringsmønstre (navne-uavhengig deteksjon):")
+                for agg in agg_result['aggregations']:
+                    print(f"  - {agg['description']}")
+                    print(f"    {agg['input_column']} → {agg['column']}: nye verdier {agg['new_values']}")
         except Exception as e:
-            print(f"⚠️  Kunne ikke analysere aggregering: {e}")
+            print(f"⚠️  Kunne ikke kjøre v2-aggregering: {e}")
+            # Fallback til gammel metode
+            try:
+                agg_result = detect_aggregation_patterns(input_dfs[0], df_output, all_mappings[0]['mappings'])
+                aggregation_insights.append(agg_result)
+                if agg_result['suggested_operations']:
+                    print("🔍 Oppdaget mulige aggregeringsmønstre (fallback):")
+                    for op in agg_result['suggested_operations']:
+                        print(f"  - {op['description']}")
+            except Exception as e2:
+                print(f"⚠️  Aggregeringsanalyse feilet helt: {e2}")
     
     # Generer script
     script_name = f"{table_code}_prep.py"
@@ -981,23 +1071,54 @@ def generate_script_content_multi_input(input_files, all_mappings,
     
     geo_comment_block = "\n".join(geo_comments) if geo_comments else ""
 
-    # Samle aggregeringsforslag (fra detect_aggregation_patterns)
+    # Samle aggregeringsforslag (fra forbedret navne-uavhengig deteksjon)
     agg_comment_lines = []
     if aggregation_insights:
         for insight in aggregation_insights:
-            ops = insight.get('suggested_operations', [])
-            if not ops:
-                continue
-            agg_comment_lines.append("\nOppdagede mulige AGGREGERINGS-operasjoner:")
-            for op in ops:
-                desc = op.get('description', 'Ingen beskrivelse')
-                snippet = op.get('code_snippet', '').strip()
-                agg_comment_lines.append(f"  - {desc}")
-                if snippet:
-                    # Indenter snippet linje for linje og kommenter det ut for sikkerhet
-                    commented_snippet = '\n'.join([f"    # {line}" if line.strip() else "" for line in snippet.split('\n')])
-                    agg_comment_lines.append("    # Forslag til kode:")
-                    agg_comment_lines.append(commented_snippet)
+            # Nytt format: {'aggregations': [...]}
+            aggregations = insight.get('aggregations', [])
+            
+            # Gammel format fallback: {'suggested_operations': [...]}
+            old_ops = insight.get('suggested_operations', [])
+            
+            if aggregations:
+                agg_comment_lines.append("\nOppdagede AGGREGERINGS-operasjoner (navne-uavhengig deteksjon):")
+                for agg in aggregations:
+                    desc = agg.get('description', 'Ukjent aggregering')
+                    col_in = agg.get('input_column', '?')
+                    col_out = agg.get('column', '?')
+                    new_vals = agg.get('new_values', [])
+                    agg_type = agg.get('type', 'other')
+                    
+                    agg_comment_lines.append(f"  - {desc}")
+                    agg_comment_lines.append(f"    Kolonne: {col_in} → {col_out}")
+                    agg_comment_lines.append(f"    Nye verdier: {new_vals}")
+                    agg_comment_lines.append(f"    Type: {agg_type}")
+                    
+                    # TODO: Generer konkret kode basert på type
+                    if agg_type == 'binary_total':
+                        agg_comment_lines.append("    # Foreslått kode:")
+                        agg_comment_lines.append(f"    # df_total = df.groupby([group_cols]).agg({{'antall': 'sum'}}).reset_index()")
+                        agg_comment_lines.append(f"    # df_total['{col_out}'] = {new_vals[0]}  # Total-kategori")
+                        agg_comment_lines.append(f"    # df_final = pd.concat([df_final, df_total], ignore_index=True)")
+                    
+                    elif agg_type == 'geography_rollup':
+                        agg_comment_lines.append("    # Foreslått kode:")
+                        agg_comment_lines.append(f"    # df_total = df.groupby([other_dims]).agg({{'antall': 'sum'}}).reset_index()")
+                        agg_comment_lines.append(f"    # df_total['{col_out}'] = {new_vals[0]}  # Oslo i alt")
+                        agg_comment_lines.append(f"    # df_final = pd.concat([df_final, df_total], ignore_index=True)")
+            
+            elif old_ops:
+                # Fallback til gammelt format
+                agg_comment_lines.append("\nOppdagede mulige AGGREGERINGS-operasjoner:")
+                for op in old_ops:
+                    desc = op.get('description', 'Ingen beskrivelse')
+                    snippet = op.get('code_snippet', '').strip()
+                    agg_comment_lines.append(f"  - {desc}")
+                    if snippet:
+                        commented_snippet = '\n'.join([f"    # {line}" if line.strip() else "" for line in snippet.split('\n')])
+                        agg_comment_lines.append("    # Forslag til kode:")
+                        agg_comment_lines.append(commented_snippet)
 
     aggregation_comment_block = "\n".join(agg_comment_lines) if agg_comment_lines else ""
 
