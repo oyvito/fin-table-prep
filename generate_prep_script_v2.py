@@ -1007,6 +1007,55 @@ def find_column_mapping_with_codelists(df_input, df_output, codelist_manager,
     }
 
 
+def simulate_merge(input_dfs):
+    """
+    Simuler merge av multiple input DataFrames for å få merged struktur.
+    
+    Strategi:
+    1. Finn felles kolonner (potensielle merge-nøkler)
+    2. Hvis felles kolonner: outer join
+    3. Hvis ingen felles: concat (union)
+    
+    Args:
+        input_dfs: List av input DataFrames
+    
+    Returns:
+        df_merged: Simulert merged DataFrame (tomme verdier ok, bare struktur matters)
+    """
+    if len(input_dfs) == 1:
+        return input_dfs[0].copy()
+    
+    # Normaliser kolonnenavn til lowercase for sammenligning
+    normalized_dfs = []
+    for df in input_dfs:
+        df_norm = df.copy()
+        df_norm.columns = df_norm.columns.str.lower()
+        normalized_dfs.append(df_norm)
+    
+    # Finn felles kolonner
+    common_cols = set(normalized_dfs[0].columns)
+    for df in normalized_dfs[1:]:
+        common_cols &= set(df.columns)
+    
+    common_cols = list(common_cols)
+    
+    if common_cols:
+        # Merge strategi: outer join på felles kolonner
+        print(f"  Simulerer MERGE på felles kolonner: {common_cols}")
+        df_merged = normalized_dfs[0]
+        for df in normalized_dfs[1:]:
+            df_merged = df_merged.merge(df, on=common_cols, how='outer', suffixes=('', '_dup'))
+        
+        # Fjern duplikat-kolonner (fra suffixes)
+        df_merged = df_merged[[col for col in df_merged.columns if not col.endswith('_dup')]]
+    else:
+        # Concat strategi: union (alle kolonner fra alle inputs)
+        print(f"  Simulerer UNION (ingen felles kolonner)")
+        df_merged = pd.concat(normalized_dfs, ignore_index=True, sort=False)
+    
+    return df_merged
+
+
 def generate_multi_input_script(input_files, output_file, table_code, 
                                 input_sheets=None, output_sheet=None):
     """
@@ -1130,7 +1179,14 @@ def generate_multi_input_script(input_files, output_file, table_code,
 
     # FASE 4: Aggregeringsanalyse (navne-uavhengig deteksjon)
     aggregation_insights = []
-    if input_dfs:
+    
+    # VIKTIG: For multi-input tabeller er aggregeringsdeteksjon problematisk fordi:
+    # 1. Vi analyserer input1 vs output, men etter merge kan strukturen være annerledes
+    # 2. Aggregering bør analyseres ETTER merge, ikke før
+    # Derfor: Disable auto-aggregering for multi-input, marker som TODO
+    
+    if len(input_dfs) == 1:
+        # Single-input: trygg aggregeringsdeteksjon
         try:
             # Bruk den forbedrede interne versjonen
             agg_result = detect_aggregation_patterns_v2(input_dfs[0], df_output, all_mappings[0]['mappings'])
@@ -1153,6 +1209,11 @@ def generate_multi_input_script(input_files, output_file, table_code,
                         print(f"  - {op['description']}")
             except Exception as e2:
                 print(f"⚠️  Aggregeringsanalyse feilet helt: {e2}")
+    else:
+        # Multi-input: Skip auto-aggregering
+        print("⚠️  Multi-input tabell: Aggregeringsdeteksjon skippet (må implementeres manuelt)")
+        print("   Aggregering bør analyseres ETTER merge, ikke før.")
+        aggregation_insights.append({'aggregations': []})
     
     # Generer script
     script_name = f"{table_code}_prep.py"
@@ -1517,10 +1578,17 @@ def transform_data('''
             else:
                 label = 'Total'
             
+            # Formater total_verdi basert på type
+            total_val = new_vals[0]
+            if isinstance(total_val, str):
+                total_val_formatted = f"'{total_val}'"
+            else:
+                total_val_formatted = str(total_val)
+            
             script += f"        {{\n"
             script += f"            'kolonne': '{col_out}',\n"
             script += f"            'type': '{agg_type}',\n"
-            script += f"            'total_verdi': {new_vals[0]},\n"
+            script += f"            'total_verdi': {total_val_formatted},\n"
             script += f"            'total_label': '{label}'\n"
             script += f"        }},\n"
         
