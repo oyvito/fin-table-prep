@@ -9,9 +9,12 @@ Automatisk generering av dataprep-script for statistikktabeller.
 ```
 fin-stat-prep/
 ├── README.md                    # Denne filen
-├── generate_prep_script.py      # Hovedverktøy for kodegenerering
+├── generate_prep_script_v2.py   # Hovedverktøy for kodegenerering (v2)
+├── aggregering.py               # Aggregeringsmodul (parallell strategi)
+├── analysemetodikk.py           # 5-stegs analysemetode
 ├── codelist_manager.py          # Håndtering av kodelister
 ├── KODELISTER_GUIDE.md          # Guide for kodelister
+├── ENCODING_GUIDE.md            # Guide for UTF-8 encoding
 ├── README_ML_STRATEGI.md        # Strategi for maskinlæring
 ├── README_transformer.md        # Dokumentasjon for transformer-verktøy
 ├── kodelister/                  # JSON-kodelister
@@ -22,6 +25,14 @@ fin-stat-prep/
 ## 🎯 Hva gjør dette verktøyet?
 
 Dette verktøyet **genererer Python-script** som transformerer rådata til ferdigformaterte statistikktabeller.
+
+### Nytt i v2 (November 2025):
+- ✅ **Automatisk aggregering** - Detekterer og genererer totalkategorier (f.eks. "Begge kjønn", "Oslo i alt")
+- ✅ **Statistikkvariabel-deteksjon** - Finner automatisk hvilke kolonner som skal summeres
+- ✅ **Variabel-par identifikasjon** - Gjenkjenner kode/label-par (f.eks. `bosted` / `bosted.1`)
+- ✅ **Navne-uavhengig deteksjon** - Bruker verdimønstre i stedet for kolonnenavn
+- ✅ **Multi-input håndtering** - Støtte for tabeller med flere input-filer
+- ✅ **Modulær aggregering** - Separat `aggregering.py` modul for gjenbruk
 
 ### Input:
 - En input Excel-fil (rådata)
@@ -132,26 +143,73 @@ Se [ML-strategi](README_ML_STRATEGI.md) for detaljer.
 
 ## 📊 Status
 
+**Nåværende versjon: v2 (November 2025)**
+
+### Fullførte funksjoner:
 - ✅ Regelbasert kodegenerering
-- ✅ Kolonnenavn-mapping
-- ✅ Kategori-verdimapping
+- ✅ Kolonnenavn-mapping med fuzzy matching
+- ✅ Kategori-verdimapping med kodelister
+- ✅ **Automatisk aggregeringsdeteksjon** (navn-uavhengig)
+- ✅ **Statistikkvariabel-identifikasjon**
+- ✅ **Variabel-par gjenkjenning** (kode/label)
+- ✅ **Multi-input merge-logikk**
+- ✅ **Modulær aggregering** (`aggregering.py`)
+- ✅ UTF-8 encoding-håndtering
 - ✅ Validering
+
+### Under utvikling:
 - ⏳ ML-basert forbedring (venter på treningsdata)
+- ⏳ Beregningsdeteksjon (kolonner som beregnes fra andre)
 - ⏳ Template-bibliotek
 - ⏳ Automatisk testing
 
+### Aggregeringstyper som støttes:
+1. **Binary total** - 2→3 verdier (f.eks. Mann/Kvinne → Begge kjønn)
+2. **Geography rollup** - Detaljert→Total (f.eks. Bydel → Oslo i alt)
+3. **Category grouping** - Mange→Få kategorier
+4. **Kryssaggregeringer** - Automatisk kombinasjon av totalkategorier
+
 ## 🔧 Tekniske detaljer
+
+### Analysemetodikk (5 faser):
+
+**FASE 1: Variabel-par og statistikkvariabel-deteksjon**
+- Identifiserer kode/label-par (f.eks. `bosted` / `bosted.1`)
+- Detekterer statistikkvariable (kolonner som skal summeres)
+- Skiller dimensjoner fra måltall
+
+**FASE 2: Kolonnemapping**
+- Fuzzy matching av kolonnenavn
+- Kodeliste-basert transformasjon
+- Geografiske kolonneforslag
+
+**FASE 3: Multi-input analyse**
+- Identifiserer felles nøkkelkolonner
+- Foreslår merge-strategi
+- Detekterer year/geo mismatches
+
+**FASE 4: Aggregeringsdeteksjon** (navn-uavhengig!)
+- Sammenligner input vs output VERDIER
+- Klassifiserer aggregeringstype basert på mønstre
+- Genererer totalkategori-informasjon
+
+**FASE 5: Script-generering**
+- Genererer Python-kode som bruker `aggregering.py`
+- Inkluderer transformasjoner og merge-logikk
+- Dokumenterer automatiske vs manuelle steg
 
 ### Hva fungerer godt nå:
 - Kolonnenavn med høy likhet (f.eks. "antall" → "antall barn")
-- Eksakte kategori-match
+- Eksakte kategori-match via kodelister
+- **Automatisk aggregering** (Oslo i alt, Begge kjønn, etc.)
+- **Multi-input merge** basert på felles nøkler
 - Grunnleggende struktur
 
 ### Hva krever ofte manuell justering:
 - Komplekse kode-konverteringer (f.eks. TKNR 301 → 30105)
-- Nye kolonner som beregnes fra eksisterende
+- Nye kolonner som beregnes fra eksisterende (FASE 5 kommer)
 - Tidsperiode-transformasjoner
-- Aggregeringer
+- Spesielle business-regler
 
 ## 📞 Support
 

@@ -455,6 +455,121 @@ def detect_variable_pairs(df):
     return pairs
 
 
+def detect_value_columns(df, variable_pairs=None):
+    """
+    Detekter statistikkvariable (kolonner som skal summeres ved aggregering).
+    
+    Identifiserer numeriske kolonner som representerer måltall/verdier,
+    og skiller dem fra dimensjonsvariabler (kategoriske kolonner).
+    
+    Forbedret heuristikk:
+    - Kolonnenavn med nøkkelord som indikerer måltall
+    - Høy kardinalitet eller stor spredning
+    - IKKE år, dato, eller ID-lignende kolonner
+    - IKKE base-kolonner i variabel-par (de er dimensjoner)
+    
+    Args:
+        df: DataFrame å analysere
+        variable_pairs: Liste av variabel-par (fra detect_variable_pairs)
+        
+    Returns:
+        dict: {
+            'value_columns': [kolonnenavn for statistikkvariable],
+            'dimension_columns': [kolonnenavn for dimensjonsvariabler],
+            'label_columns': [kolonnenavn for label-kolonner]
+        }
+    """
+    # Bygg sett av label-kolonner og base-kolonner fra variable_pairs
+    label_cols = set()
+    base_cols = set()
+    if variable_pairs:
+        for pair in variable_pairs:
+            label_cols.add(pair['label'])
+            base_cols.add(pair['base'])
+    
+    # Keywords som indikerer måltall (positiv match)
+    value_keywords = [
+        'antall', 'count', 'value', 'verdi', 'beløp', 'sum', 'total', 
+        'inntekt', 'utgift', 'pris', 'kr', 'prosent', 'andel', 'rate',
+        'kostnad', 'lønn', 'skatt', 'avgift', 'bestand', 'saldo'
+    ]
+    
+    # Keywords som indikerer dimensjoner (negativ match for value_cols)
+    dimension_keywords = [
+        'år', 'aar', 'year', 'dato', 'date', 'tid', 'time',
+        'id', 'kode', 'code', 'nr', 'nummer', 'number',
+        'alder', 'age', 'måned', 'month', 'dag', 'day',
+        'uke', 'week', 'kvartal', 'quarter'
+    ]
+    
+    value_columns = []
+    dimension_columns = []
+    
+    n_rows = len(df)
+    
+    for col in df.columns:
+        # Skip label-kolonner
+        if col in label_cols:
+            continue
+        
+        col_lower = col.lower()
+        
+        # Sjekk om kolonnen er numerisk
+        if df[col].dtype in ['int64', 'float64', 'int32', 'float32', 'int16', 'float16']:
+            nunique = df[col].nunique(dropna=True)
+            
+            # 1. Sjekk nøkkelord først
+            is_value_keyword = any(keyword in col_lower for keyword in value_keywords)
+            is_dimension_keyword = any(keyword in col_lower for keyword in dimension_keywords)
+            
+            # 2. Base-kolonner i variabel-par er dimensjoner
+            if col in base_cols:
+                dimension_columns.append(col)
+                continue
+            
+            # 3. Eksplisitt value-keyword → value column
+            if is_value_keyword and not is_dimension_keyword:
+                value_columns.append(col)
+                continue
+            
+            # 4. Eksplisitt dimension-keyword → dimension
+            if is_dimension_keyword:
+                dimension_columns.append(col)
+                continue
+            
+            # 5. Heuristikk basert på kardinalitet og spredning
+            # Lav kardinalitet (< 5% av rader eller < 200 unike) = sannsynligvis dimensjon
+            if nunique < max(n_rows * 0.05, 1) or nunique < 200:
+                dimension_columns.append(col)
+            # Høy kardinalitet = sannsynligvis måltall
+            else:
+                # Ekstra sjekk: Beregn spredning (coefficient of variation)
+                try:
+                    mean_val = df[col].mean()
+                    std_val = df[col].std()
+                    if mean_val > 0:
+                        cv = std_val / mean_val
+                        # Høy variasjon (CV > 0.5) indikerer måltall
+                        if cv > 0.5:
+                            value_columns.append(col)
+                        else:
+                            dimension_columns.append(col)
+                    else:
+                        value_columns.append(col)
+                except:
+                    value_columns.append(col)
+        
+        # Ikke-numeriske kolonner (og ikke labels) = dimensjoner
+        elif col not in label_cols:
+            dimension_columns.append(col)
+    
+    return {
+        'value_columns': value_columns,
+        'dimension_columns': dimension_columns,
+        'label_columns': list(label_cols)
+    }
+
+
 def detect_aggregation_patterns(df_input, df_output, mappings):
     """Detekter typiske aggregeringsmønstre mellom input og output.
 
@@ -930,19 +1045,38 @@ def generate_multi_input_script(input_files, output_file, table_code,
     print(f"  Kolonner: {df_output.columns.tolist()}")
     print(f"  Rader: {len(df_output)}\n")
     
-    # FASE 1: Detekter variabel-par tidlig (før kolonnemapping)
-    # Dette lar oss unngå å mappe begge kolonner i et par
-    print("=== FASE 1: Variabel-par deteksjon ===")
+    # FASE 1: Detekter variabel-par og statistikkvariable tidlig (før kolonnemapping)
+    # Dette lar oss unngå å mappe begge kolonner i et par og identifisere value_cols
+    print("=== FASE 1: Variabel-par og statistikkvariabel-deteksjon ===")
     variable_pairs_all = []
+    value_columns_all = []
+    
     for i, df_in in enumerate(input_dfs, 1):
+        # Detekter variabel-par
         pairs = detect_variable_pairs(df_in)
         variable_pairs_all.append(pairs)
+        
+        # Detekter statistikkvariable
+        value_info = detect_value_columns(df_in, pairs)
+        value_columns_all.append(value_info)
+        
+        print(f"=== Input {i} ===")
         if pairs:
-            print(f"Variabel-par funnet i input {i}:")
+            print(f"Variabel-par funnet:")
             for p in pairs:
                 print(f"  - {p['base']} / {p['label']} ({p['pattern']})")
         else:
-            print(f"Ingen variabel-par funnet i input {i}")
+            print(f"Ingen variabel-par funnet")
+        
+        print(f"\nStatistikkvariable (skal summeres):")
+        for col in value_info['value_columns']:
+            print(f"  - {col}")
+        
+        print(f"\nDimensjonsvariabler (kategoriske):")
+        for col in value_info['dimension_columns'][:5]:  # Vis maks 5
+            print(f"  - {col}")
+        if len(value_info['dimension_columns']) > 5:
+            print(f"  ... og {len(value_info['dimension_columns']) - 5} til")
         print()
     
     # FASE 2: Analyser mappings for hver input-fil (med variabel-par info)
@@ -1026,7 +1160,7 @@ def generate_multi_input_script(input_files, output_file, table_code,
     script_content = generate_script_content_multi_input(
         input_files, all_mappings, all_transformations, all_geographic_suggestions,
         aggregation_insights, df_output.columns.tolist(), table_code,
-        common_keys_info, variable_pairs_all
+        common_keys_info, variable_pairs_all, value_columns_all
     )
     
     with open(script_name, 'w', encoding='utf-8') as f:
@@ -1042,17 +1176,21 @@ def generate_multi_input_script(input_files, output_file, table_code,
 def generate_script_content_multi_input(input_files, all_mappings, 
                                        all_transformations, all_geographic_suggestions,
                                        aggregation_insights, output_columns, table_code,
-                                       common_keys_info=None, variable_pairs_all=None):
+                                       common_keys_info=None, variable_pairs_all=None,
+                                       value_columns_all=None):
     """Generer selve Python-scriptet for multi-input transformasjon.
 
     Args:
         input_files: Liste av input filstier
         all_mappings: Liste med mapping-info per input
-        all_transformations: Kodeliste-transformasjoner per input
-        all_geographic_suggestions: Forslag til geo kolonnenavn per input
-        aggregation_insights: Liste (typisk lengde 1) med aggregeringsanalyse
-        output_columns: Kolonner i referanse-output
-        table_code: Tabellkode (f.eks. OK-BEF001)
+        all_transformations: Liste med kodeliste-transformasjoner per input
+        all_geographic_suggestions: Liste med geografiske forslag per input
+        aggregation_insights: Liste med aggregeringsinfo
+        output_columns: Output kolonne-navn
+        table_code: Tabellkode
+        common_keys_info: Info om felles nøkler for merge (valgfri)
+        variable_pairs_all: Liste av variabel-par per input (valgfri)
+        value_columns_all: Liste av statistikkvariabel-info per input (valgfri)
     """
     
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1329,10 +1467,46 @@ def transform_data('''
         script += "\n    # Enkelt input – df_final_candidate settes til første transformerte dataframe\n"
         script += "    df_final_candidate = df1_transformed\n"
     
-    script += f'''
-    # TODO: Velg endelig datasett
-    df_final = df_final_candidate  # Kan justeres manuelt ved behov
+    # AGGREGERINGER - Generer kode som bruker aggregering.py modulen
+    if aggregation_insights and aggregation_insights[0].get('aggregations'):
+        script += "\n    # AGGREGERINGER - Legg til totalkategorier\n"
+        script += "    from aggregering import apply_aggregeringer\n\n"
+        script += "    aggregeringer = [\n"
+        
+        for agg in aggregation_insights[0]['aggregations']:
+            col_out = agg['column']
+            new_vals = agg['new_values']
+            agg_type = agg['type']
+            
+            # Finn label basert på type og kolonnenavn
+            label_col = col_out + '.1'
+            if label_col in output_columns:
+                if 'kjønn' in col_out.lower() or 'kjonn' in col_out.lower():
+                    label = 'Begge kjønn'
+                elif new_vals[0] in ['301', '0301']:
+                    label = '0301 Oslo'
+                else:
+                    label = 'Total'
+            else:
+                label = 'Total'
+            
+            script += f"        {{\n"
+            script += f"            'kolonne': '{col_out}',\n"
+            script += f"            'type': '{agg_type}',\n"
+            script += f"            'total_verdi': {new_vals[0]},\n"
+            script += f"            'total_label': '{label}'\n"
+            script += f"        }},\n"
+        
+        script += "    ]\n\n"
+        
+        # Generer kommentar med forklaring
+        script += "    # Utfør aggregeringer (auto-detekterer value_columns)\n"
+        script += "    df_final = apply_aggregeringer(df_final_candidate, aggregeringer)\n\n"
+    else:
+        script += "\n    # Ingen aggregeringer detektert\n"
+        script += "    df_final = df_final_candidate\n\n"
     
+    script += f'''
     # Velg og sorter output-kolonner
     output_columns = {output_columns}
     
