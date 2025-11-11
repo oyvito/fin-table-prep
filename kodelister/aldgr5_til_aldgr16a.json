@@ -22,5 +22,26 @@
     "Sysselsettingsdata bruker brede 10+ års aldersgrupper",
     "Befolkningsdata bruker smale 5-års aldersgrupper",
     "For andelsberegning må befolkningsdata aggregeres til sysselsatte's grupper"
-  ]
+  ],
+  "domain_knowledge": {
+    "context": "Sysselsettingstabeller med 2 inputs (sysselsatte + befolkning)",
+    "temporal_alignment": {
+      "sysselsatte": "Registrert i slutten av Q3 hvert år (f.eks. sept 2024)",
+      "befolkning": "Registrert 1. januar året etter (f.eks. jan 2025)",
+      "adjustment": "Befolkningsåret må justeres til {år}-1 før sammenkobling",
+      "example": "Sysselsatte 2024 kobles mot befolkning 2025 (justert til 2024)"
+    },
+    "transformation_steps": [
+      "1. Juster befolkningsåret: aargang = aargang - 1",
+      "2. Mapper aldersgrupper: aldgr5 → aldgr16a (via denne kodelisten)",
+      "3. Aggreger befolkning til sysselsatte's aldersgrupper (groupby + sum)",
+      "4. UNION sysselsatte + aggregert befolkning (samme struktur)",
+      "5. Vurder aggregeringer (totalkategorier) og/eller andelstall"
+    ],
+    "typical_outputs": [
+      "antall_sysselsatte",
+      "antall_befolkning", 
+      "andel_sysselsatte (= antall_sysselsatte / antall_befolkning)"
+    ]
+  }
 }

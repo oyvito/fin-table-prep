@@ -38,7 +38,47 @@ with open('fil.json', 'w', encoding='utf-8') as f:
 
 ### Pandas Excel
 OpenPyXL håndterer encoding automatisk, men vær oppmerksom på:
-- XML-escaped values: `_x0031_` → `'1'` (decode_xml_escapes)
+
+#### XML-encoding i Excel
+Excel lagrer noen spesialtegn som XML-entities internt:
+- `_x0032_025` → `'2025'` (tall)
+- `_x0031_5-24_x0020_år` → `'15-24 år'` (tekst med mellomrom)
+- `_x0036_0_x0020_-74` → `'60 -74'` (ekstra mellomrom før bindestrek)
+
+**Løsning:** Vi har `decode_xml_strings()` funksjon i genererte scripts:
+```python
+def decode_xml_strings(df):
+    """
+    Dekoder XML-encoded strings i Excel-filer.
+    Normaliserer også whitespace for å unngå match-problemer.
+    """
+    import re
+    
+    def decode_string(val):
+        if not isinstance(val, str):
+            return val
+        # Regex: _x[4-digit hex]_ → tilsvarende Unicode-tegn
+        decoded = re.sub(r'_x([0-9A-Fa-f]{4})_', lambda m: chr(int(m.group(1), 16)), val)
+        # Normaliser whitespace (fjern doble mellomrom, ' -' → '-')
+        decoded = ' '.join(decoded.split())
+        decoded = decoded.replace(' -', '-')
+        return decoded
+    
+    for col in df.columns:
+        if df[col].dtype == 'object':  # Kun tekstkolonner
+            df[col] = df[col].apply(decode_string)
+    
+    return df
+```
+
+**Bruk:**
+```python
+df = pd.read_excel('input.xlsx')
+df = normalize_column_names(df)  # Først: lowercase kolonnenavn
+df = decode_xml_strings(df)      # Deretter: dekod XML-entities
+```
+
+#### Generelt
 - Bruk `str.strip()` for å fjerne whitespace
 
 ### Print til console

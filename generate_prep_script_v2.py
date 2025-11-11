@@ -1329,6 +1329,32 @@ def normalize_column_names(df):
     return df
 
 
+def decode_xml_strings(df):
+    """
+    Dekoder XML-encoded strings i Excel-filer.
+    Eksempel: '_x0032_025' → '2025', '_x0031_5-24_x0020_år' → '15-24 år'
+    
+    Normaliserer også whitespace for å unngå match-problemer.
+    """
+    import re
+    
+    def decode_string(val):
+        if not isinstance(val, str):
+            return val
+        # Regex: _x[4-digit hex]_ → tilsvarende Unicode-tegn
+        decoded = re.sub(r'_x([0-9A-Fa-f]{{4}})_', lambda m: chr(int(m.group(1), 16)), val)
+        # Normaliser whitespace (fjern doble mellomrom, ' -' → '-')
+        decoded = ' '.join(decoded.split())
+        decoded = decoded.replace(' -', '-')
+        return decoded
+    
+    for col in df.columns:
+        if df[col].dtype == 'object':  # Kun tekstkolonner
+            df[col] = df[col].apply(decode_string)
+    
+    return df
+
+
 def load_codelists():
     """Last inn relevante kodelister."""
     import json
@@ -1377,6 +1403,7 @@ def transform_data('''
     print(f"Leser {{input_file{i+1}}}...")
     df{i+1} = pd.read_excel(input_file{i+1})
     df{i+1} = normalize_column_names(df{i+1})  # Normaliser til lowercase
+    df{i+1} = decode_xml_strings(df{i+1})  # Dekoder XML-encoding
     print(f"  {{len(df{i+1})}} rader, {{len(df{i+1}.columns)}} kolonner")
     
 '''

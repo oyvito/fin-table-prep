@@ -11,6 +11,7 @@ fin-stat-prep/
 ├── README.md                    # Denne filen
 ├── generate_prep_script_v2.py   # Hovedverktøy for kodegenerering (v2)
 ├── aggregering.py               # Aggregeringsmodul (parallell strategi)
+├── andeler.py                   # Andelsberegninger (teller/nevner)
 ├── analysemetodikk.py           # 5-stegs analysemetode
 ├── codelist_manager.py          # Håndtering av kodelister
 ├── KODELISTER_GUIDE.md          # Guide for kodelister
@@ -28,11 +29,12 @@ Dette verktøyet **genererer Python-script** som transformerer rådata til ferdi
 
 ### Nytt i v2 (November 2025):
 - ✅ **Automatisk aggregering** - Detekterer og genererer totalkategorier (f.eks. "Begge kjønn", "Oslo i alt")
+- ✅ **Andelsberegninger** - Separat modul for teller/nevner-beregninger (sysselsatte/befolkning, etc.)
 - ✅ **Statistikkvariabel-deteksjon** - Finner automatisk hvilke kolonner som skal summeres
 - ✅ **Variabel-par identifikasjon** - Gjenkjenner kode/label-par (f.eks. `bosted` / `bosted.1`)
 - ✅ **Navne-uavhengig deteksjon** - Bruker verdimønstre i stedet for kolonnenavn
 - ✅ **Multi-input håndtering** - Støtte for tabeller med flere input-filer
-- ✅ **Modulær aggregering** - Separat `aggregering.py` modul for gjenbruk
+- ✅ **Modulær arkitektur** - Gjenbrukbare moduler (`aggregering.py`, `andeler.py`)
 
 ### Input:
 - En input Excel-fil (rådata)
