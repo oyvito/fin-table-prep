@@ -1078,11 +1078,21 @@ def generate_multi_input_script(input_files, output_file, table_code,
     # Last treningseksempler
     training_examples = load_training_examples()
     
-    # Les input-filer
+    # STEG 1: Les input-filer med encoding/normalisering
+    print("=== STEG 1: Les og ENCODE input-filer ===")
     input_dfs = []
     for i, input_file in enumerate(input_files):
         sheet = input_sheets[i] if input_sheets and i < len(input_sheets) else 0
         df = pd.read_excel(input_file, sheet_name=sheet)
+        
+        # Lowercase kolonnenavn
+        df.columns = df.columns.str.lower().str.strip()
+        
+        # Simuler XML-dekoding (whitespace normalisering)
+        # Dette er kritisk for merge-matching!
+        for col in df.select_dtypes(include=['object']).columns:
+            df[col] = df[col].astype(str).str.replace(' -', '-').str.replace('  ', ' ').str.strip()
+        
         input_dfs.append(df)
         print(f"Input fil {i+1}: {input_file}")
         print(f"  Kolonner: {df.columns.tolist()}")
@@ -1094,22 +1104,36 @@ def generate_multi_input_script(input_files, output_file, table_code,
     print(f"  Kolonner: {df_output.columns.tolist()}")
     print(f"  Rader: {len(df_output)}\n")
     
-    # FASE 1: Detekter variabel-par og statistikkvariable tidlig (før kolonnemapping)
-    # Dette lar oss unngå å mappe begge kolonner i et par og identifisere value_cols
-    print("=== FASE 1: Variabel-par og statistikkvariabel-deteksjon ===")
+    # STEG 2: MERGE hvis multi-input (eller bruk single input direkte)
+    print("=== STEG 2: MERGE (hvis multi-input) ===")
+    if len(input_dfs) > 1:
+        # Multi-input: simuler merge for analyse
+        analysis_df = simulate_merge(input_dfs)
+        print(f"✅ Merged {len(input_dfs)} inputs → {len(analysis_df)} rader")
+        print(f"   Merged kolonner: {analysis_df.columns.tolist()}\n")
+        is_multi_input = True
+    else:
+        # Single-input: analyser direkte
+        analysis_df = input_dfs[0].copy()
+        print(f"Single-input tabell: Analyserer direkte\n")
+        is_multi_input = False
+    
+    # STEG 3: Variabel-par og statistikkvariabel-deteksjon (på merged/single input)
+    print("=== STEG 3: Variabel-par og statistikkvariabel-deteksjon ===")
     variable_pairs_all = []
     value_columns_all = []
     
-    for i, df_in in enumerate(input_dfs, 1):
-        # Detekter variabel-par
-        pairs = detect_variable_pairs(df_in)
-        variable_pairs_all.append(pairs)
+    if is_multi_input:
+        # For multi-input: analyser merged df
+        pairs = detect_variable_pairs(analysis_df)
+        value_info = detect_value_columns(analysis_df, pairs)
         
-        # Detekter statistikkvariable
-        value_info = detect_value_columns(df_in, pairs)
-        value_columns_all.append(value_info)
+        # Lagre samme info for alle inputs (brukes av template-generator)
+        for i in range(len(input_dfs)):
+            variable_pairs_all.append(pairs)
+            value_columns_all.append(value_info)
         
-        print(f"=== Input {i} ===")
+        print(f"=== Merged DataFrame ===")
         if pairs:
             print(f"Variabel-par funnet:")
             for p in pairs:
@@ -1122,37 +1146,66 @@ def generate_multi_input_script(input_files, output_file, table_code,
             print(f"  - {col}")
         
         print(f"\nDimensjonsvariabler (kategoriske):")
-        for col in value_info['dimension_columns'][:5]:  # Vis maks 5
+        for col in value_info['dimension_columns'][:5]:
             print(f"  - {col}")
         if len(value_info['dimension_columns']) > 5:
             print(f"  ... og {len(value_info['dimension_columns']) - 5} til")
         print()
+    else:
+        # For single-input: analyser som før
+        for i, df_in in enumerate(input_dfs, 1):
+            pairs = detect_variable_pairs(df_in)
+            variable_pairs_all.append(pairs)
+            
+            value_info = detect_value_columns(df_in, pairs)
+            value_columns_all.append(value_info)
+            
+            print(f"=== Input {i} ===")
+            if pairs:
+                print(f"Variabel-par funnet:")
+                for p in pairs:
+                    print(f"  - {p['base']} / {p['label']} ({p['pattern']})")
+            else:
+                print(f"Ingen variabel-par funnet")
+            
+            print(f"\nStatistikkvariable (skal summeres):")
+            for col in value_info['value_columns']:
+                print(f"  - {col}")
+            
+            print(f"\nDimensjonsvariabler (kategoriske):")
+            for col in value_info['dimension_columns'][:5]:
+                print(f"  - {col}")
+            if len(value_info['dimension_columns']) > 5:
+                print(f"  ... og {len(value_info['dimension_columns']) - 5} til")
+            print()
     
-    # FASE 2: Analyser mappings for hver input-fil (med variabel-par info)
-    print("=== FASE 2: Kolonnemapping ===")
+    # STEG 4: Kolonnemapping (analysis_df → output)
+    print("=== STEG 4: Kolonnemapping ===")
     all_mappings = []
     all_transformations = []
     all_standardizations = []
     all_geographic_suggestions = []
     
-    for i, df_input in enumerate(input_dfs):
+    if is_multi_input:
+        # Multi-input: map merged df → output
         result = find_column_mapping_with_codelists(
-            df_input, df_output, codelist_mgr, kontrollskjema, table_code,
-            known_pairs=variable_pairs_all[i]  # Send variabel-par info!
+            analysis_df, df_output, codelist_mgr, kontrollskjema, table_code,
+            known_pairs=variable_pairs_all[0]
         )
         
-        all_mappings.append({
-            'file_index': i,
-            'mappings': result['mappings'],
-            'unmapped_input': result['unmapped_input'],
-            'unmapped_output': result['unmapped_output']
-        })
+        # Lagre samme mapping for alle inputs (brukes av template-generator)
+        for i in range(len(input_dfs)):
+            all_mappings.append({
+                'file_index': i,
+                'mappings': result['mappings'],
+                'unmapped_input': result['unmapped_input'],
+                'unmapped_output': result['unmapped_output']
+            })
+            all_transformations.append(result['value_transformations'])
+            all_standardizations.append(result['standardization_suggestions'])
+            all_geographic_suggestions.append(result['geographic_suggestions'])
         
-        all_transformations.append(result['value_transformations'])
-        all_standardizations.append(result['standardization_suggestions'])
-        all_geographic_suggestions.append(result['geographic_suggestions'])
-        
-        print(f"=== Input fil {i+1} ===")
+        print(f"=== Merged DataFrame → Output ===")
         print(f"Mappings funnet: {len(result['mappings'])}")
         print(f"Kodeliste-transformasjoner: {len(result['value_transformations'])}")
         if result['standardization_suggestions']:
@@ -1168,52 +1221,86 @@ def generate_multi_input_script(input_files, output_file, table_code,
                     print(f"      - {reason}")
         print(f"Umappede input-kolonner: {result['unmapped_input']}")
         print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
+    else:
+        # Single-input: map hver input → output (som før)
+        for i, df_input in enumerate(input_dfs):
+            result = find_column_mapping_with_codelists(
+                df_input, df_output, codelist_mgr, kontrollskjema, table_code,
+                known_pairs=variable_pairs_all[i]
+            )
+            
+            all_mappings.append({
+                'file_index': i,
+                'mappings': result['mappings'],
+                'unmapped_input': result['unmapped_input'],
+                'unmapped_output': result['unmapped_output']
+            })
+            
+            all_transformations.append(result['value_transformations'])
+            all_standardizations.append(result['standardization_suggestions'])
+            all_geographic_suggestions.append(result['geographic_suggestions'])
+            
+            print(f"=== Input fil {i+1} ===")
+            print(f"Mappings funnet: {len(result['mappings'])}")
+            print(f"Kodeliste-transformasjoner: {len(result['value_transformations'])}")
+            if result['standardization_suggestions']:
+                print(f"Standardiserings-forslag: {result['standardization_suggestions']}")
+            if result['geographic_suggestions']:
+                print(f"\n🗺️  GEOGRAFISKE FORSLAG:")
+                for col, suggestion in result['geographic_suggestions'].items():
+                    print(f"  {col} →")
+                    print(f"    Kode-kolonne: {suggestion['code_column']}")
+                    print(f"    Navn-kolonne: {suggestion['label_column']}")
+                    print(f"    Begrunnelse:")
+                    for reason in suggestion['reasoning']:
+                        print(f"      - {reason}")
+            print(f"Umappede input-kolonner: {result['unmapped_input']}")
+            print(f"Umappede output-kolonner: {result['unmapped_output']}\n")
 
-    # FASE 3: Multi-input struktur: identifiser felles nøkler
-    # VIKTIG: Sender med mappings slik at vi finner felles kolonner basert på STANDARDNAVN
-    print("=== FASE 3: Multi-input nøkkelanalyse ===")
-    common_keys_info = identify_common_keys(input_dfs, df_output, all_mappings)
-    print(f"Foreslåtte felles nøkkelkolonner (standardnavn): {common_keys_info['candidate_keys']}")
-    print(f"Unikhetsratio per kolonne: {common_keys_info['key_quality']}")
-    print(f"Kompositt unikhet (approx): {common_keys_info['composite_uniqueness']:.3f}\n")
+    # STEG 5: Multi-input nøkkelanalyse (hvis relevant)
+    print("=== STEG 5: Multi-input nøkkelanalyse ===")
+    if is_multi_input:
+        # VIKTIG: Analyser ORIGINAL input-filer for felles nøkler (ikke merged!)
+        # Vi trenger å vite hvilke kolonner er felles for merge-operasjonen
+        common_keys_info = identify_common_keys(input_dfs, df_output, all_mappings)
+        print(f"Foreslåtte felles nøkkelkolonner (standardnavn): {common_keys_info['candidate_keys']}")
+        print(f"Unikhetsratio per kolonne: {common_keys_info['key_quality']}")
+        print(f"Kompositt unikhet (approx): {common_keys_info['composite_uniqueness']:.3f}\n")
+    else:
+        common_keys_info = None
+        print("Single-input: Ingen nøkkelanalyse nødvendig\n")
 
-    # FASE 4: Aggregeringsanalyse (navne-uavhengig deteksjon)
+    # STEG 6: Aggregeringsanalyse (analysis_df → output)
+    print("=== STEG 6: Aggregeringsanalyse ===")
     aggregation_insights = []
     
-    # VIKTIG: For multi-input tabeller er aggregeringsdeteksjon problematisk fordi:
-    # 1. Vi analyserer input1 vs output, men etter merge kan strukturen være annerledes
-    # 2. Aggregering bør analyseres ETTER merge, ikke før
-    # Derfor: Disable auto-aggregering for multi-input, marker som TODO
-    
-    if len(input_dfs) == 1:
-        # Single-input: trygg aggregeringsdeteksjon
+    try:
+        # Bruk den forbedrede interne versjonen på analysis_df (merged eller single)
+        agg_result = detect_aggregation_patterns_v2(
+            analysis_df, df_output, all_mappings[0]['mappings']
+        )
+        aggregation_insights.append(agg_result)
+        
+        if agg_result['aggregations']:
+            print("🔍 Oppdaget aggregeringsmønstre (navne-uavhengig deteksjon):")
+            for agg in agg_result['aggregations']:
+                print(f"  - {agg['description']}")
+                print(f"    {agg['input_column']} → {agg['column']}: nye verdier {agg['new_values']}")
+    except Exception as e:
+        print(f"⚠️  Kunne ikke kjøre v2-aggregering: {e}")
+        # Fallback til gammel metode
         try:
-            # Bruk den forbedrede interne versjonen
-            agg_result = detect_aggregation_patterns_v2(input_dfs[0], df_output, all_mappings[0]['mappings'])
+            agg_result = detect_aggregation_patterns(
+                analysis_df, df_output, all_mappings[0]['mappings']
+            )
             aggregation_insights.append(agg_result)
-            
-            if agg_result['aggregations']:
-                print("🔍 Oppdaget aggregeringsmønstre (navne-uavhengig deteksjon):")
-                for agg in agg_result['aggregations']:
-                    print(f"  - {agg['description']}")
-                    print(f"    {agg['input_column']} → {agg['column']}: nye verdier {agg['new_values']}")
-        except Exception as e:
-            print(f"⚠️  Kunne ikke kjøre v2-aggregering: {e}")
-            # Fallback til gammel metode
-            try:
-                agg_result = detect_aggregation_patterns(input_dfs[0], df_output, all_mappings[0]['mappings'])
-                aggregation_insights.append(agg_result)
-                if agg_result['suggested_operations']:
-                    print("🔍 Oppdaget mulige aggregeringsmønstre (fallback):")
-                    for op in agg_result['suggested_operations']:
-                        print(f"  - {op['description']}")
-            except Exception as e2:
-                print(f"⚠️  Aggregeringsanalyse feilet helt: {e2}")
-    else:
-        # Multi-input: Skip auto-aggregering
-        print("⚠️  Multi-input tabell: Aggregeringsdeteksjon skippet (må implementeres manuelt)")
-        print("   Aggregering bør analyseres ETTER merge, ikke før.")
-        aggregation_insights.append({'aggregations': []})
+            if agg_result['suggested_operations']:
+                print("🔍 Oppdaget mulige aggregeringsmønstre (fallback):")
+                for op in agg_result['suggested_operations']:
+                    print(f"  - {op['description']}")
+        except Exception as e2:
+            print(f"⚠️  Aggregeringsanalyse feilet helt: {e2}")
+            aggregation_insights.append({'aggregations': []})
     
     # Generer script
     script_name = f"{table_code}_prep.py"
@@ -1470,6 +1557,8 @@ def transform_data('''
 '''
     
     # Generer transformasjonslogikk for hver fil
+    # VIKTIG: Behold originale kolonnenavn til SLUTTEN
+    # All transformasjonslogikk bruker originale navn
     for i, mapping_info in enumerate(all_mappings, 1):
         mappings = mapping_info['mappings']
         transformations = all_transformations[i-1]
@@ -1477,94 +1566,117 @@ def transform_data('''
         # Konverter mappings til lowercase (siden vi normaliserer kolonnenavn til lowercase)
         mappings_lower = {k.lower(): v for k, v in mappings.items()}
         
-        if mappings_lower:
-            script += f'''    # Transformer data fra input {i}
+        script += f'''    # Input {i}: Behold originale kolonnenavn (transformeres senere)
     df{i}_transformed = df{i}.copy()
     
 '''
-            
-            # Kolonnenavn-endringer (inkluder ALLE mappings først)
-            # Kodeliste-transformasjoner håndteres separat etterpå
-            if mappings_lower:
-                script += f'''    # Endre kolonnenavn
-    df{i}_transformed = df{i}_transformed.rename(columns={{
-'''
-                for old_col, new_col in mappings_lower.items():
-                    script += f'''        '{old_col}': '{new_col}',
-'''
-                script += '''    })
-    
-'''
-            
-            # Kodeliste-transformasjoner (kun for kolonner som faktisk trenger det)
-            for in_col, trans_info in transformations.items():
-                if in_col not in mappings:
-                    # Skip hvis kolonne ikke ble mappet
-                    continue
-                    
-                codelist_name = trans_info['codelist']
-                target_col = trans_info['target_col']
+        
+        # Kodeliste-transformasjoner (på originale kolonnenavn!)
+        for in_col, trans_info in transformations.items():
+            if in_col.lower() not in [k.lower() for k in mappings.keys()]:
+                # Skip hvis kolonne ikke ble mappet
+                continue
                 
-                # Verifiser at kodeliste-navnet er riktig format
-                if not codelist_name.startswith('SSB_til_PX') and not codelist_name.startswith('NAV_TKNR'):
-                    # Skip kodelister med feil navn (f.eks. 'geo_bydel')
-                    continue
-                
-                script += f'''    # Transformer '{target_col}' med kodeliste {codelist_name}
+            codelist_name = trans_info['codelist']
+            target_col = trans_info['target_col']
+            
+            # Verifiser at kodeliste-navnet er riktig format
+            if not codelist_name.startswith('SSB_til_PX') and not codelist_name.startswith('NAV_TKNR'):
+                # Skip kodelister med feil navn (f.eks. 'geo_bydel')
+                continue
+            
+            # Bruk ORIGINAL kolonnenavn i transformasjonen
+            in_col_lower = in_col.lower()
+            script += f'''    # Transformer '{in_col_lower}' med kodeliste {codelist_name}
     if '{codelist_name}' in codelists:
         codelist = codelists['{codelist_name}']
         mapping = codelist.get('mappings', {{}})
         
         # TODO: Bruk kodeliste for å transformere verdier
-        # df{i}_transformed['{target_col}'] = df{i}_transformed['{target_col}'].astype(str).map(mapping)
+        # df{i}_transformed['{in_col_lower}'] = df{i}_transformed['{in_col_lower}'].astype(str).map(mapping)
         
         # Legg til labels hvis nødvendig
         # labels = codelist.get('labels', {{}})
-        # df{i}_transformed['{target_col}_navn'] = df{i}_transformed['{target_col}'].map(labels)
+        # df{i}_transformed['{in_col_lower}_navn'] = df{i}_transformed['{in_col_lower}'].map(labels)
     
 '''
     
     script += f'''    
     # MULTI-INPUT FUSJON / UNION
     # Hvis flere input-filer: bygg union/merge basert på felles nøkkelkolonner.
+    # VIKTIG: Bruker originale kolonnenavn i merge!
     '''
     
     if num_inputs > 1:
-        # Hent foreslåtte felles nøkler
-        common_keys = []
+        # Hent foreslåtte felles nøkler fra ORIGINAL kolonnenavn
+        # Må konvertere tilbake fra standardnavn til originale navn
+        common_keys_orig = []
         if common_keys_info and common_keys_info.get('candidate_keys'):
-            common_keys = common_keys_info.get('candidate_keys')
-        script += "\n    # Foreslåtte felles nøkkelkolonner: " + str(common_keys) + "\n"
-        script += "    if not " + str(common_keys) + ":\n"
+            std_keys = common_keys_info.get('candidate_keys')
+            # Reverser mappings for å finne originale kolonnenavn
+            reverse_mappings = []
+            for mapping_info in all_mappings:
+                mappings = mapping_info['mappings']
+                mappings_lower = {k.lower(): v.lower() for k, v in mappings.items()}
+                reverse = {v: k for k, v in mappings_lower.items()}
+                reverse_mappings.append(reverse)
+            
+            # Finn originale navn som mapper til standard-nøklene
+            for std_key in std_keys:
+                std_key_lower = std_key.lower()
+                # Sjekk om dette er et mappet navn
+                if std_key_lower in reverse_mappings[0]:
+                    common_keys_orig.append(reverse_mappings[0][std_key_lower])
+                else:
+                    # Hvis ikke mappet, bruk som det er
+                    common_keys_orig.append(std_key_lower)
+        
+        script += "\n    # Foreslåtte felles nøkkelkolonner (originale navn): " + str(common_keys_orig) + "\n"
+        script += "    if not " + str(common_keys_orig) + ":\n"
         script += "        print(\"⚠️ Ingen automatiske felles nøkler funnet – vurder manuell merge.\")\n"
         script += "    else:\n"
         script += "        # Verifiser tilstedeværelse i alle datasett\n"
         for i in range(1, num_inputs+1):
-            script += f"        missing_{i} = [k for k in {common_keys} if k not in df{i}_transformed.columns]\n"
+            script += f"        missing_{i} = [k for k in {common_keys_orig} if k not in df{i}_transformed.columns]\n"
             script += f"        if missing_{i}: print(\"⚠️ Input {i} mangler kolonner:\", missing_{i})\n"
         # Start med første dataframe
         script += "        df_merged = df1_transformed.copy()\n"
         for i in range(2, num_inputs+1):
-            script += f"        df_merged = df_merged.merge(df{i}_transformed, on={common_keys}, how='outer')\n"
+            script += f"        df_merged = df_merged.merge(df{i}_transformed, on={common_keys_orig}, how='outer')\n"
         script += "\n        # Hvis duplikater oppstår (samme nøkkel flere ganger), aggreger målekolonner ved sum\n"
-        script += "        measure_cols = [c for c in df_merged.columns if c.lower().startswith('sysselsatte') or c.lower() in ['antall','value','count']]\n"
-        script += "        if df_merged.shape[0] > df_merged.drop_duplicates(subset=" + str(common_keys) + ").shape[0]:\n"
-        script += "            df_merged = df_merged.groupby(" + str(common_keys) + ", dropna=False)[measure_cols].sum().reset_index()\n"
+        script += "        measure_cols = [c for c in df_merged.columns if c.lower() in ['antall','value','count','sysselsatte','befolkning']]\n"
+        script += "        if df_merged.shape[0] > df_merged.drop_duplicates(subset=" + str(common_keys_orig) + ").shape[0]:\n"
+        script += "            df_merged = df_merged.groupby(" + str(common_keys_orig) + ", dropna=False)[measure_cols].sum().reset_index()\n"
         script += "\n        # Sett df_final til merged resultat\n        df_final_candidate = df_merged\n"
     else:
         script += "\n    # Enkelt input – df_final_candidate settes til første transformerte dataframe\n"
         script += "    df_final_candidate = df1_transformed\n"
     
     # AGGREGERINGER - Generer kode som bruker aggregering.py modulen
+    # VIKTIG: Aggregering bruker ORIGINALE kolonnenavn!
     if aggregation_insights and aggregation_insights[0].get('aggregations'):
-        script += "\n    # AGGREGERINGER - Legg til totalkategorier\n"
+        script += "\n    # AGGREGERINGER - Legg til totalkategorier (på originale kolonnenavn)\n"
         script += "    from aggregering import apply_aggregeringer\n\n"
         script += "    aggregeringer = [\n"
         
+        # Må mappe tilbake fra output-kolonnenavn til originale kolonnenavn
+        # Reverser mappings
+        all_mappings_lower = {}
+        for mapping_info in all_mappings:
+            mappings = mapping_info['mappings']
+            all_mappings_lower.update({v.lower(): k.lower() for k, v in mappings.items()})
+        
         for agg in aggregation_insights[0]['aggregations']:
-            col_out = agg['column']
+            col_out = agg['column']  # Dette er output-kolonnenavn
+            input_col = agg.get('input_column', col_out)  # Originalt input-kolonnenavn
             new_vals = agg['new_values']
             agg_type = agg['type']
+            
+            # Bruk input_column hvis tilgjengelig, ellers prøv å reverse-mappe
+            if input_col == col_out and col_out.lower() in all_mappings_lower:
+                col_to_use = all_mappings_lower[col_out.lower()]
+            else:
+                col_to_use = input_col.lower()
             
             # Finn label basert på type og kolonnenavn
             label_col = col_out + '.1'
@@ -1586,7 +1698,7 @@ def transform_data('''
                 total_val_formatted = str(total_val)
             
             script += f"        {{\n"
-            script += f"            'kolonne': '{col_out}',\n"
+            script += f"            'kolonne': '{col_to_use}',\n"
             script += f"            'type': '{agg_type}',\n"
             script += f"            'total_verdi': {total_val_formatted},\n"
             script += f"            'total_label': '{label}'\n"
@@ -1601,11 +1713,26 @@ def transform_data('''
         script += "\n    # Ingen aggregeringer detektert\n"
         script += "    df_final = df_final_candidate\n\n"
     
-    script += f'''
-    # Velg og sorter output-kolonner
+    # SIST: Rename kolonner til output-navn og velg kolonner
+    script += "    # SIST: Rename kolonner til output-format\n"
+    script += "    # Bygg rename-mapping fra alle inputs\n"
+    script += "    final_rename = {}\n"
+    for mapping_info in all_mappings:
+        mappings = mapping_info['mappings']
+        mappings_lower = {k.lower(): v for k, v in mappings.items()}
+        script += "    final_rename.update({\n"
+        for orig, output in mappings_lower.items():
+            script += f"        '{orig}': '{output}',\n"
+        script += "    })\n"
+    
+    script += "\n    # Rename kun kolonner som faktisk eksisterer\n"
+    script += "    rename_dict = {k: v for k, v in final_rename.items() if k in df_final.columns}\n"
+    script += "    df_final = df_final.rename(columns=rename_dict)\n\n"
+    
+    script += f'''    # Velg og sorter output-kolonner
     output_columns = {output_columns}
     
-    # TODO: Fjern kolonner som ikke finnes i df_final
+    # Fjern kolonner som ikke finnes i df_final
     available_cols = [col for col in output_columns if col in df_final.columns]
     df_final = df_final[available_cols]
     
