@@ -12,6 +12,21 @@ For utvikling:
 pip install -e ".[dev]"
 ```
 
+## Organisering av tabeller
+
+Tabeller organiseres i `data/` mappen, med en undermappe for hver tabell:
+
+```
+data/
+└── [TABELL-ID]/
+    ├── README.md          # Dokumentasjon
+    ├── config.json        # Konfigurasjon
+    ├── data.csv           # Kildedata
+    └── output.py          # Generert script (ignoreres av git)
+```
+
+Se [data/README.md](data/README.md) for mer informasjon.
+
 ## Bruk
 
 ### Kommandolinje

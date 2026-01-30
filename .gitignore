@@ -66,3 +66,7 @@ Thumbs.db
 *.log
 output/
 generated/
+
+# Generated table scripts (keep config and data, ignore generated output)
+data/*/output.py
+data/*/output_*.py
