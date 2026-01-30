@@ -331,6 +331,21 @@ def find_column_mapping_with_codelists(
     mappings = resolve_duplicate_mappings(mappings, output_cols)
     used_output_cols = set(mappings.values())
     
+    # 7. Map label-kolonner fra variabel-par til .1 varianter
+    if known_pairs:
+        for pair in known_pairs:
+            base_col = pair['base']
+            label_col = pair['label']
+            
+            # Finn hvilken output-kolonne base mapper til
+            base_output = mappings.get(base_col)
+            if base_output:
+                # Sjekk om .1 variant finnes i output
+                label_output = f"{base_output}.1"
+                if label_output in output_cols and label_output not in used_output_cols:
+                    mappings[label_col] = label_output
+                    used_output_cols.add(label_output)
+    
     unmapped_input = [col for col in input_cols if col not in mappings]
     unmapped_output = [col for col in output_cols if col not in used_output_cols]
     

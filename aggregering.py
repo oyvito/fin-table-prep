@@ -95,6 +95,28 @@ def apply_aggregeringer(df_base, aggregeringer, value_cols=None):
     # Bygg aggregeringsdictionary for pandas
     agg_dict = {col: 'sum' for col in value_cols}
     
+    # Funksjon for å finne label-kolonner
+    def find_label_col(base_col, columns):
+        """Finn label-kolonne for en base-kolonne."""
+        # Prøv vanlige mønstre
+        patterns = [
+            f'{base_col}.1',
+            f'{base_col}_fmt',
+            f'{base_col}_label',
+            f'{base_col}_navn',
+            f'{base_col}_name',
+        ]
+        for pattern in patterns:
+            if pattern in columns:
+                return pattern
+        return None
+    
+    # Funksjon for å sjekke om kolonne er label
+    def is_label_col(col, columns):
+        """Sjekk om en kolonne er en label-kolonne."""
+        suffixes = ['.1', '_fmt', '_label', '_navn', '_name']
+        return any(col.endswith(s) for s in suffixes)
+    
     agg_results = []
     
     # 1. Lag hver enkelt-dimensjon aggregering fra basis
@@ -103,16 +125,20 @@ def apply_aggregeringer(df_base, aggregeringer, value_cols=None):
         total_verdi = agg['total_verdi']
         total_label = agg['total_label']
         
-        # Gruppér på alle dimensjoner UNNTATT denne kolonnen
+        # Gruppér på alle dimensjoner UNNTATT denne kolonnen og dens label
+        label_col = find_label_col(kolonne, df_base.columns)
+        exclude_cols = [kolonne] + value_cols
+        if label_col:
+            exclude_cols.append(label_col)
+        
         group_cols = [c for c in df_base.columns 
-                     if c not in [kolonne] + value_cols and not c.endswith('.1')]
+                     if c not in exclude_cols and not is_label_col(c, df_base.columns)]
         
         df_total = df_base.groupby(group_cols, dropna=False).agg(agg_dict).reset_index()
         df_total[kolonne] = total_verdi
         
         # Legg til label hvis den eksisterer
-        label_col = f'{kolonne}.1'
-        if label_col in df_base.columns:
+        if label_col:
             df_total[label_col] = total_label
         
         agg_results.append(df_total)
@@ -124,8 +150,17 @@ def apply_aggregeringer(df_base, aggregeringer, value_cols=None):
             for agg_combo in combinations(aggregeringer, r):
                 # Gruppér på dimensjoner som IKKE er i denne kombinasjonen
                 agg_kolonner = [agg['kolonne'] for agg in agg_combo]
+                
+                # Finn label-kolonner for aggregeringskolonner
+                agg_label_cols = []
+                for agg_kol in agg_kolonner:
+                    lbl = find_label_col(agg_kol, df_base.columns)
+                    if lbl:
+                        agg_label_cols.append(lbl)
+                
+                exclude_cols = agg_kolonner + agg_label_cols + value_cols
                 group_cols = [c for c in df_base.columns 
-                             if c not in agg_kolonner + value_cols and not c.endswith('.1')]
+                             if c not in exclude_cols and not is_label_col(c, df_base.columns)]
                 
                 # Hvis det ikke er noen group_cols igjen, aggreger over ALT (grand total)
                 if not group_cols:
@@ -137,9 +172,9 @@ def apply_aggregeringer(df_base, aggregeringer, value_cols=None):
                 # Sett totalkategorier for alle aggregerte dimensjoner
                 for agg in agg_combo:
                     df_cross[agg['kolonne']] = agg['total_verdi']
-                    label_col = f"{agg['kolonne']}.1"
-                    if label_col in df_base.columns:
-                        df_cross[label_col] = agg['total_label']
+                    lbl_col = find_label_col(agg['kolonne'], df_base.columns)
+                    if lbl_col:
+                        df_cross[lbl_col] = agg['total_label']
                 
                 agg_results.append(df_cross)
     
