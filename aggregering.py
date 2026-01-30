@@ -147,7 +147,6 @@ def apply_aggregeringer(df_base, aggregeringer, value_cols=None):
     df_final = pd.concat([df_base] + agg_results, ignore_index=True)
     
     return df_final
-    return df_final
 
 
 def apply_single_aggregering(df_base, kolonne, total_verdi, total_label, value_cols=None):
