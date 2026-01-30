@@ -12,7 +12,7 @@ data/
     ├── README.md          # Dokumentasjon for tabellen
     ├── config.json        # Konfigurasjon for tabellbehandling
     ├── data.csv           # Kildedata (CSV eller Excel)
-    └── output.py          # Generert script (ignoreres av git)
+    └── output.py          # Generert skript (ignoreres av git)
 ```
 
 ## Eksempel: OK-SYS001
@@ -24,7 +24,7 @@ cp din_datafil.csv data/OK-SYS001/data.csv
 # Rediger config.json etter behov
 nano data/OK-SYS001/config.json
 
-# Generer script
+# Generer skript
 fin-table-prep data/OK-SYS001/data.csv -o data/OK-SYS001/output.py -c data/OK-SYS001/config.json
 ```
 
@@ -34,7 +34,7 @@ fin-table-prep data/OK-SYS001/data.csv -o data/OK-SYS001/output.py -c data/OK-SY
 2. Legg til datakildefilen (CSV eller Excel)
 3. Opprett en `config.json` med tabellkonfigurasjon
 4. Opprett en `README.md` for å dokumentere tabellen
-5. Generer scriptet med `fin-table-prep`
+5. Generer skriptet med `fin-table-prep`
 
 ## Merknad
 
