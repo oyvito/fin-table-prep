@@ -1,6 +1,6 @@
 # Domenekunnskap for Oslo Kommune Statistikk
 
-**Sist oppdatert:** 2025-11-05
+**Sist oppdatert:** 2025-12-19
 
 Dette dokumentet inneholder domene-spesifikk kunnskap som er viktig for korrekt transformasjon av statistikkdata.
 
@@ -141,6 +141,161 @@ df['aargang'] = sysselsatte_aargang  # 2024
 ### Tidsperioder
 - Data per **4. kvartal** hvert år
 - Følger samme logikk som sysselsettingsdata
+
+---
+
+## NAV Sosialstatistikk (OK-SOS-tabeller)
+
+### Oversikt
+NAV-tabeller dekker ulike støtte- og trygdeordninger:
+- **OK-SOS002:** Barnetrygd
+- **OK-SOS003:** Sosialhjelpsmottakere
+- **OK-SOS004:** Grunnstønad og hjelpestønad
+- **OK-SOS006:** Uføretrygd
+- **OK-SOS007:** Alderspensjon
+
+### TKNR-koder (Gamle Bydelskoder)
+
+**Historisk kontekst:**
+Eldre NAV-data bruker TKNR-koder (Trygdekontornummer) som er forløpere til dagens 5-sifrede bydelskoder.
+
+**Kodeliste:**
+Offisiell mapping finnes i: `kodelister/NAV_TKNR_til_PX.json`
+
+Kodelisten inneholder:
+- `tknr_to_ssb`: TKNR → SSB 5-sifrede bydelskoder (301, 30101-30115)
+- `tknr_to_px`: TKNR → PX kortkoder (100000, 1-15)
+- `labels`: Bydelsnavn for alle koder
+
+**Eksempel mapping (tknr_to_ssb):**
+```python
+# Last fra kodeliste
+import json
+with open('kodelister/NAV_TKNR_til_PX.json', 'r', encoding='utf-8') as f:
+    codelist = json.load(f)
+
+tknr_mapping = {int(k): v for k, v in codelist['mappings']['tknr_to_ssb'].items()}
+# Resultat:
+# {301: '301', 312: '30105', 313: '30104', 314: '30103', ...}
+```
+
+**Bruk:**
+- Identifiser TKNR-kolonner i input (ofte kalt `TKNR` eller `tknr`)
+- Mappe til moderne `geografi`-koder
+- Legg til `geografi_`-kolonne med bydelsnavn
+
+### Barnetrygd-spesifikke Felt
+
+**Forsørgerstatus:**
+- `I alt` (total)
+- `To forsørgere` (to-forelderhushold)
+- `Enslig forsørger` (eneforsørger)
+
+**Barnets alder:**
+Aldersgrupper for barnetrygd-berettigede barn:
+- `I alt`
+- `0-5 år`
+- `6-9 år`
+- `10-12 år`
+- `13-15 år`
+- `16-17 år`
+
+**Viktig datakvalitet:**
+Input-data kan ha prefix på aldersgrupper (f.eks. "1: 0 - 5", "2: 6 - 9"). 
+Disse må renses:
+```python
+alder_mapping = {
+    '1: 0 - 5': '0-5 år',
+    '2: 6 - 9': '6-9 år',
+    '3: 10 - 12': '10-12 år',
+    '4: 13 - 15': '13-15 år',
+    '5: 16 - 17': '16-17 år',
+    'I alt': 'I alt'
+}
+```
+
+### Multi-format Support
+
+**Problem:**
+NAV leverer data i ulike formater mellom år:
+- 2023: Enkelt Excel-ark
+- 2024: Multi-sheet Excel med ett ark per stønad/kategori
+
+**Løsning:**
+Scripts må auto-detektere format:
+```python
+# Sjekk antall ark
+sheet_names = pd.ExcelFile(input_file).sheet_names
+
+if len(sheet_names) == 1:
+    # 2023-format: Enkelt ark
+    df = pd.read_excel(input_file)
+else:
+    # 2024-format: Velg spesifikt ark
+    if sheet_name:
+        df = pd.read_excel(input_file, sheet_name=sheet_name)
+    else:
+        # Auto-detekter basert på kolonnenavn eller ark-navn
+        for sheet in sheet_names:
+            if 'keyword' in sheet.lower():
+                df = pd.read_excel(input_file, sheet_name=sheet)
+```
+
+### Sentrum/Marka-håndtering
+
+**Spesialbydeler:**
+Enkelte tabeller (f.eks. OK-SOS007 alderspensjon) har historiske kategorier:
+- Bydel 30116 (Sentrum) - utgått
+- Bydel 30117 (Marka) - utgått
+
+**Moderne praksis:**
+Merge til felles kategori:
+- Kode: `30119192`
+- Navn: `Sentrum og Marka`
+
+```python
+# Merge Sentrum og Marka
+sentrum_marka = df[df['geografi'].isin(['30116', '30117'])].copy()
+sentrum_marka_sum = sentrum_marka.groupby(
+    ['år', 'kjønn', 'alder']
+).agg({'antall': 'sum'}).reset_index()
+sentrum_marka_sum['geografi'] = '30119192'
+sentrum_marka_sum['geografi_'] = 'Sentrum og Marka'
+
+# Fjern originale og legg til merged
+df = df[~df['geografi'].isin(['30116', '30117'])]
+df = pd.concat([df, sentrum_marka_sum], ignore_index=True)
+```
+
+### Prikkede Verdier
+
+**Hva er prikkede verdier?**
+NAV prikker (sensurerer) små tall for personvern. Vises som `*` i data.
+
+**Håndtering:**
+```python
+# Behold '*' som string
+if df['antall'].dtype != 'object':
+    df['antall'] = df['antall'].astype(str)
+
+# Erstatt spesielle missing-verdier
+df['antall'] = df['antall'].replace(['-', '', 'NaN'], '*')
+```
+
+### Standardiserte Kolonnenavn
+
+**NAV-tabeller bruker ofte:**
+- `år` / `periode` → standardiser til `år`
+- `geografi` + `geografi_` (kode + navn)
+- `kjønn` / `Kjønn` → standardiser til `kjønn`
+- `alder` / `Alder` / `aldersgrupper` → avhenger av tabell
+- `antall` / `Antall` → standardiser til beskrivende navn (f.eks. `antall barn`, `Antall personer`)
+
+**Best practice:**
+Bruk beskrivende navn i output:
+- `antall barn` (barnetrygd)
+- `Antall personer` (uføretrygd, alderspensjon)
+- `Antall` (sosialhjelpsmottakere)
 
 ---
 

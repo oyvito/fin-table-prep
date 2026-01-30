@@ -1,0 +1,1003 @@
+{
+  "version": "PX-2013",
+  "source": "https://www.pxtools.net/px-file-format/px-2013/",
+  "last_updated": "2026-01-09",
+  "description": "Komplett liste over PX-format keywords med egenskaper og begrensninger",
+  
+  "keyword_properties": {
+    "mandatory": {
+      "description": "Obligatoriske keywords som må være med i alle PX-filer"
+    },
+    "optional": {
+      "description": "Valgfrie keywords som kan brukes ved behov"
+    }
+  },
+  
+  "mandatory_keywords": {
+    "CHARSET": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "default": null,
+      "description": "Tekstkoding (ANSI for Windows, ellers DOS)",
+      "example": "CHARSET=\"ANSI\";",
+      "note": "Må komme tidlig i filen før spesialtegn"
+    },
+    
+    "LANGUAGE": {
+      "type": "text",
+      "max_length": 2,
+      "multiline": false,
+      "mandatory": true,
+      "description": "Språkkode (ISO 639-1: no, en, sv, etc.)",
+      "example": "LANGUAGE=\"no\";",
+      "note": "2 tegn språkkode"
+    },
+    
+    "CONTENTS": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": false,
+      "mandatory": true,
+      "language_dependent": true,
+      "description": "Beskrivelse av innhold/statistikk-type",
+      "example": "CONTENTS=\"Population\";",
+      "note": "Brukes til å bygge tabelltittel"
+    },
+    
+    "DATA": {
+      "type": "data",
+      "multiline": true,
+      "mandatory": true,
+      "description": "Keyword som markerer start på datadelen",
+      "example": "DATA=\n1234 5678 9012;",
+      "note": "Må alltid være siste keyword i filen"
+    },
+    
+    "DECIMALS": {
+      "type": "integer",
+      "range": [0, 15],
+      "multiline": false,
+      "mandatory": true,
+      "description": "Antall desimaler lagret i filen",
+      "example": "DECIMALS=0;",
+      "note": "0-6 hvis SHOWDECIMALS ikke brukes"
+    },
+    
+    "HEADING": {
+      "type": "text",
+      "max_length": 256,
+      "per_value": true,
+      "multiline": true,
+      "mandatory": "conditional",
+      "language_dependent": true,
+      "description": "Variabler i kolonneaksen",
+      "example": "HEADING=\"year\",\"region\";",
+      "note": "Minst en av STUB eller HEADING må være med"
+    },
+    
+    "MATRIX": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "mandatory": true,
+      "description": "Matrise-/tabellnavn (brukes som filnavn)",
+      "example": "MATRIX=\"BEF001\";",
+      "note": "Max 20 tegn (fra 2008)"
+    },
+    
+    "STUB": {
+      "type": "text",
+      "max_length": 256,
+      "per_value": true,
+      "multiline": true,
+      "mandatory": "conditional",
+      "language_dependent": true,
+      "description": "Variabler i radaksen",
+      "example": "STUB=\"region\",\"age\";",
+      "note": "Minst en av STUB eller HEADING må være med"
+    },
+    
+    "SUBJECT-AREA": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": false,
+      "mandatory": true,
+      "language_dependent": true,
+      "description": "Emneområde (vist i meny)",
+      "example": "SUBJECT-AREA=\"Population statistics\";",
+      "note": "Max 256 tegn (fra 2008)"
+    },
+    
+    "SUBJECT-CODE": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "mandatory": true,
+      "description": "Emnekode",
+      "example": "SUBJECT-CODE=\"BE\";",
+      "note": "Max 20 tegn (fra 2008)"
+    },
+    
+    "TITLE": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "mandatory": "conditional",
+      "language_dependent": true,
+      "description": "Tabelltittel",
+      "example": "TITLE=\"Population by region and age\";",
+      "note": "Ikke nødvendig hvis DESCRIPTION finnes"
+    },
+    
+    "UNITS": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": false,
+      "mandatory": true,
+      "language_dependent": true,
+      "description": "Enhet (personer, tonn, indeks, etc.)",
+      "example": "UNITS=\"persons\";",
+      "note": "Kan være indexert ved CONTVARIABLE"
+    },
+    
+    "VALUES": {
+      "type": "text",
+      "max_length": 256,
+      "per_value": true,
+      "multiline": true,
+      "mandatory": true,
+      "language_dependent": true,
+      "subkey": "variable_name",
+      "description": "Verdier for hver variabel",
+      "example": "VALUES(\"age\")=\"0-17\",\"18-66\",\"67+\";",
+      "note": "En per variabel, max 256 tegn per verdi"
+    }
+  },
+  
+  "optional_keywords": {
+    "AGGREGALLOWED": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "default": "YES",
+      "multiline": false,
+      "description": "Om innholdet kan aggregeres",
+      "example": "AGGREGALLOWED=NO;",
+      "note": "Brukes for indeks/gjennomsnitt som ikke skal summeres"
+    },
+    
+    "ATTRIBUTE-ID": {
+      "type": "text",
+      "max_length": 256,
+      "per_value": true,
+      "multiline": true,
+      "language_independent": true,
+      "description": "ID-er for attributter (metadata for celler)",
+      "example": "ATTRIBUTE-ID=\"ObsStatus\",\"ObsConf\";",
+      "note": "Må komme før ATTRIBUTES"
+    },
+    
+    "ATTRIBUTE-TEXT": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Tekstbeskrivelse av attributter",
+      "example": "ATTRIBUTE-TEXT=\"Observation status\",\"Confidence\";",
+      "note": "Valgfri, kommer etter ATTRIBUTE-ID"
+    },
+    
+    "ATTRIBUTES": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "subkey": "cell_coordinates",
+      "description": "Attributtverdier per celle",
+      "example": "ATTRIBUTES(\"01\",\"A01\",\"2005\")=\"A\",\"P\";",
+      "note": "Må komme etter ATTRIBUTE-ID og CODES"
+    },
+    
+    "AUTOPEN": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "default": "NO",
+      "multiline": false,
+      "description": "Åpne tabell automatisk ved nedlasting",
+      "example": "AUTOPEN=YES;",
+      "note": "For internett-publisering"
+    },
+    
+    "AXIS-VERSION": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "description": "PC-Axis versjonsnummer",
+      "example": "AXIS-VERSION=\"2013\";",
+      "note": "Leses og lagres, men brukes ikke"
+    },
+    
+    "BASEPERIOD": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "contvariable_value",
+      "description": "Basisperiode for indeksserier",
+      "example": "BASEPERIOD=\"2015=100\";",
+      "note": "Vises i fotnote"
+    },
+    
+    "CELLNOTE": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "cell_coordinates",
+      "description": "Fotnote for spesifikk celle eller gruppe",
+      "example": "CELLNOTE(\"*\",\"*\",\"Oslo\",\"1995\")=\"Note text\";",
+      "note": "* betyr alle verdier for den variabelen"
+    },
+    
+    "CELLNOTEX": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "cell_coordinates",
+      "description": "Obligatorisk fotnote for celle (som NOTEX)",
+      "example": "CELLNOTEX(\"01\",\"2020\")=\"Preliminary\";",
+      "note": "Vises obligatorisk"
+    },
+    
+    "CFPRICES": {
+      "type": "enum",
+      "allowed_values": ["C", "F"],
+      "multiline": false,
+      "subkey": "contvariable_value",
+      "description": "Løpende (C) eller faste (F) priser",
+      "example": "CFPRICES=\"C\";",
+      "note": "Krever anførselstegn"
+    },
+    
+    "CODEPAGE": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "default": "iso-8859-1",
+      "description": "Tegnkoding for XML-konvertering",
+      "example": "CODEPAGE=\"UTF-8\";",
+      "note": "Brukes ved XML-generering"
+    },
+    
+    "CODES": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Koder parallelt med VALUES",
+      "example": "CODES(\"region\")=\"01\",\"02\",\"03\";",
+      "note": "Brukes når både kode og tekst finnes"
+    },
+    
+    "CONFIDENTIAL": {
+      "type": "integer",
+      "allowed_values": [0, 1],
+      "default": 0,
+      "max_length": 20,
+      "multiline": false,
+      "description": "Personvernkontroll (1=mask små tall)",
+      "example": "CONFIDENTIAL=1;",
+      "note": "1 viser 1→0 og 2→3"
+    },
+    
+    "CONTACT": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "contvariable_value",
+      "description": "Kontaktinformasjon (navn, org, tlf, epost)",
+      "example": "CONTACT=\"Maria Svensson, SCB, +4619176800, maria@scb.se\";",
+      "note": "Flere personer skilles med #"
+    },
+    
+    "CONTVARIABLE": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Navn på innholdsvariabel (for flere innhold)",
+      "example": "CONTVARIABLE=\"statistics\";",
+      "note": "Må komme før indexerte keywords"
+    },
+    
+    "COPYRIGHT": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "max_length": 20,
+      "multiline": false,
+      "description": "Opphavsrett (YES=refererer til SOURCE)",
+      "example": "COPYRIGHT=YES;",
+      "note": "Vises med fotnoter"
+    },
+    
+    "CREATION-DATE": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "format": "CCYYMMDD hh:mm",
+      "description": "Dato/tid filen ble opprettet",
+      "example": "CREATION-DATE=\"20260109 14:30\";",
+      "note": "Format: ÅÅÅÅMMDD tt:mm"
+    },
+    
+    "DATABASE": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Navn på kildedatabase",
+      "example": "DATABASE=\"StatBank Norway\";",
+      "note": "Vises i fotnote"
+    },
+    
+    "DATANOTE": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_or_value",
+      "description": "Markør for at det finnes note",
+      "example": "DATANOTE(\"time\",\"2010\")=\"*\";",
+      "note": "Brukes sammen med VALUENOTE"
+    },
+    
+    "DATANOTECELL": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "subkey": "cell_coordinates",
+      "description": "Notetegn for spesifikk celle",
+      "example": "DATANOTECELL(\"*\",\"20\",\"*\",\"BE0101F2\",\"*\")=\"Ae\";",
+      "note": "CODES brukes i koordinater"
+    },
+    
+    "DATANOTESUM": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "description": "Notetegn ved sum av forskjellige noter",
+      "example": "DATANOTESUM=\"#\";",
+      "note": "Brukes ved aggregering"
+    },
+    
+    "DATASYMBOL1": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": ".",
+      "description": "Presentasjon av lagret '.'",
+      "example": "DATASYMBOL1=\"..\";",
+      "note": "Standard: enkelt punktum"
+    },
+    
+    "DATASYMBOL2": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": "..",
+      "description": "Presentasjon av lagret '..'",
+      "example": "DATASYMBOL2=\":\";",
+      "note": "Standard: dobbelt punktum"
+    },
+    
+    "DATASYMBOL3": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": "...",
+      "description": "Presentasjon av lagret '...'",
+      "example": "DATASYMBOL3=\"...\";",
+      "note": "Standard: tre punktum"
+    },
+    
+    "DATASYMBOL4": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": "....",
+      "description": "Presentasjon av lagret '....'",
+      "example": "DATASYMBOL4=\"....\";",
+      "note": "Standard: fire punktum"
+    },
+    
+    "DATASYMBOL5": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": ".....",
+      "description": "Presentasjon av lagret '.....'",
+      "example": "DATASYMBOL5=\".....\";",
+      "note": "Standard: fem punktum"
+    },
+    
+    "DATASYMBOL6": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": "......",
+      "description": "Presentasjon av lagret '......'",
+      "example": "DATASYMBOL6=\"......\";",
+      "note": "Standard: seks punktum"
+    },
+    
+    "DATASYMBOLNIL": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "default": "-",
+      "description": "Presentasjon av lagret '-' (absolutt null)",
+      "example": "DATASYMBOLNIL=\"-\";",
+      "note": "Standard: bindestrek"
+    },
+    
+    "DATASYMBOLSUM": {
+      "type": "text",
+      "max_length": 20,
+      "multiline": false,
+      "language_dependent": true,
+      "description": "Presentasjon av sum med ulike punktum",
+      "example": "DATASYMBOLSUM=\".......\";",
+      "note": "Lagres som sju punktum"
+    },
+    
+    "DAYADJ": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "default": "NO",
+      "multiline": false,
+      "language_dependent": true,
+      "subkey": "contvariable_value",
+      "description": "Om data er dagkorrigert",
+      "example": "DAYADJ=YES;",
+      "note": "For arbeidsdager etc."
+    },
+    
+    "DEFAULT-GRAPH": {
+      "type": "integer",
+      "max_length": 10,
+      "range": [1, 10],
+      "multiline": false,
+      "description": "Standard graftype",
+      "example": "DEFAULT-GRAPH=2;",
+      "note": "Leses/lagres, ikke brukt i PC-Axis"
+    },
+    
+    "DESCRIPTION": {
+      "type": "text",
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Beskrivelse av tabellinnhold",
+      "example": "DESCRIPTION=\"Population by region 2020-2025\";",
+      "note": "Brukes hvis TITLE mangler"
+    },
+    
+    "DESCRIPTIONDEFAULT": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "multiline": false,
+      "description": "Bruk DESCRIPTION som tittel",
+      "example": "DESCRIPTIONDEFAULT=YES;",
+      "note": "For språk hvor dynamisk tittel er vanskelig"
+    },
+    
+    "DIRECTORY-PATH": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "description": "Filsti til tabell",
+      "example": "DIRECTORY-PATH=\"C:\\data\\tables\";",
+      "note": "Leses/lagres, ikke brukt"
+    },
+    
+    "DOMAIN": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Domene for variabel (for aggregeringslister)",
+      "example": "DOMAIN(\"region\")=\"GEO\";",
+      "note": "Brukes til å finne riktige verdiset"
+    },
+    
+    "DOUBLECOLUMN": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "multiline": false,
+      "language_dependent": true,
+      "subkey": "variable_name",
+      "description": "Kode og tekst i separate kolonner",
+      "example": "DOUBLECOLUMN(\"region\")=YES;",
+      "note": "Kun effekt i matrise-format"
+    },
+    
+    "ELIMINATION": {
+      "type": "mixed",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_name",
+      "description": "Hvordan variabel kan elimineres",
+      "example": "ELIMINATION(\"age\")=YES;",
+      "note": "YES eller spesifikk verdi"
+    },
+    
+    "FIRST-PUBLISHED": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "format": "CCYYMMDD hh:mm",
+      "description": "Første publiseringsdato",
+      "example": "FIRST-PUBLISHED=\"20130224 20:55\";",
+      "note": "Format: ÅÅÅÅMMDD tt:mm"
+    },
+    
+    "HIERARCHIES": {
+      "type": "text",
+      "max_length": 256,
+      "per_value": true,
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Hierarkisk struktur (parent:child)",
+      "example": "HIERARCHIES(\"region\")=\"NO\",\"NO\":\"Oslo\",\"NO\":\"Bergen\";",
+      "note": "For hierarkiske klassifiseringer"
+    },
+    
+    "HIERARCHYLEVELS": {
+      "type": "integer",
+      "multiline": false,
+      "subkey": "variable_name",
+      "description": "Antall nivåer i symmetrisk tre",
+      "example": "HIERARCHYLEVELS(\"region\")=3;",
+      "note": "For symmetriske hierarkier"
+    },
+    
+    "HIERARCHYLEVELSOPEN": {
+      "type": "integer",
+      "multiline": false,
+      "subkey": "variable_name",
+      "description": "Hvor mange nivåer åpne ved visning",
+      "example": "HIERARCHYLEVELSOPEN(\"region\")=1;",
+      "note": "1 = kun første nivå åpent"
+    },
+    
+    "HIERARCHYNAMES": {
+      "type": "text",
+      "max_length": 256,
+      "per_name": true,
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Navn på hierarkinivåer",
+      "example": "HIERARCHYNAMES(\"region\")=\"Land\",\"Fylke\",\"Kommune\";",
+      "note": "For symmetriske tre"
+    },
+    
+    "INFO": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Generell info",
+      "example": "INFO=\"Additional information\";",
+      "note": "Leses/lagres, ikke vist"
+    },
+    
+    "INFOFILE": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Filnavn med utvidet informasjon",
+      "example": "INFOFILE=\"info.pdf\";",
+      "note": "Knapp i toolbar for å åpne fil"
+    },
+    
+    "KEYS": {
+      "type": "enum",
+      "allowed_values": ["VALUES", "CODES"],
+      "multiline": false,
+      "subkey": "variable_name",
+      "description": "Om VALUES eller CODES brukes som nøkkel",
+      "example": "KEYS(\"region\")=CODES;",
+      "note": "Brukes for kompakte datafiler"
+    },
+    
+    "LANGUAGES": {
+      "type": "text",
+      "max_length": 2,
+      "per_language": true,
+      "multiline": true,
+      "description": "Liste over alle språk i filen",
+      "example": "LANGUAGES=\"no\",\"en\";",
+      "note": "2 tegn per språk"
+    },
+    
+    "LAST-UPDATED": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": false,
+      "format": "CCYYMMDD hh:mm",
+      "subkey": "contvariable_value",
+      "description": "Siste oppdateringsdato",
+      "example": "LAST-UPDATED=\"20260109 12:00\";",
+      "note": "Ikke auto-oppdatert av PC-Axis"
+    },
+    
+    "LINK": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "URL-lenke",
+      "example": "LINK=\"https://www.ssb.no\";",
+      "note": "Leses/lagres, ikke vist"
+    },
+    
+    "MAP": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_name",
+      "description": "Kartnavn for geografisk variabel",
+      "example": "MAP(\"region\")=\"Norway_municipality\";",
+      "note": "For kartvisning"
+    },
+    
+    "META-ID": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": false,
+      "subkey": "variable_or_value",
+      "description": "Referanse til ekstern metadata",
+      "example": "META-ID=\"RT:12\";",
+      "note": "Kan være for tabell, variabel eller verdi"
+    },
+    
+    "NEXT-UPDATE": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "description": "Neste oppdateringsdato",
+      "example": "NEXT-UPDATE=\"20260201\";",
+      "note": "Leses/lagres, ikke vist"
+    },
+    
+    "NOTE": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_name_optional",
+      "description": "Valgfri fotnote",
+      "example": "NOTE=\"Data collected annually\";",
+      "note": "Vises ved F7 eller på forespørsel"
+    },
+    
+    "NOTEX": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_name_optional",
+      "description": "Obligatorisk fotnote (vises automatisk)",
+      "example": "NOTEX=\"Preliminary figures\";",
+      "note": "Vises alltid før tabell"
+    },
+    
+    "OFFICIAL-STATISTICS": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "multiline": false,
+      "description": "Om tabellen er offisiell statistikk",
+      "example": "OFFICIAL-STATISTICS=YES;",
+      "note": "Markerer offisiell status"
+    },
+    
+    "PARTITIONED": {
+      "type": "complex",
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Inndeling av kode i nivåer",
+      "example": "PARTITIONED(\"region\")=\"municipality\",1,4;",
+      "note": "Max 3 nivåer, posisjon og lengde"
+    },
+    
+    "PRECISION": {
+      "type": "integer",
+      "multiline": false,
+      "subkey": "variable_and_value",
+      "description": "Desimaler for spesifikk verdi",
+      "example": "PRECISION(\"region\",\"Oslo\")=2;",
+      "note": "Må være høyere enn SHOWDECIMALS"
+    },
+    
+    "PRESTEXT": {
+      "type": "integer",
+      "range": [0, 3],
+      "multiline": false,
+      "subkey": "variable_name",
+      "description": "Hvordan verdier vises (0=kode, 1=tekst, 2=kode+tekst, 3=tekst+kode)",
+      "example": "PRESTEXT(\"region\")=2;",
+      "note": "0=kode, 1=tekst, 2=kode tekst, 3=tekst kode"
+    },
+    
+    "PX-SERVER": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "description": "PX-server info",
+      "example": "PX-SERVER=\"server.domain.no\";",
+      "note": "Leses/lagres, ikke vist"
+    },
+    
+    "REFPERIOD": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "contvariable_value",
+      "description": "Referanseperiode for statistikken",
+      "example": "REFPERIOD=\"1 January - 31 December\";",
+      "note": "Vises i fotnote"
+    },
+    
+    "ROUNDING": {
+      "type": "integer",
+      "range": [0, 1],
+      "multiline": true,
+      "description": "Avrundingsregel (0=partall, 1=alltid opp)",
+      "example": "ROUNDING=1;",
+      "note": "0=.5→partall, 1=.5→alltid opp"
+    },
+    
+    "SEASADJ": {
+      "type": "enum",
+      "allowed_values": ["YES", "NO"],
+      "default": "NO",
+      "multiline": false,
+      "subkey": "contvariable_value",
+      "description": "Om data er sesongjustert",
+      "example": "SEASADJ=YES;",
+      "note": "For tidsserier"
+    },
+    
+    "SHOWDECIMALS": {
+      "type": "integer",
+      "range": [0, 6],
+      "multiline": false,
+      "description": "Antall desimaler vist (må være ≤ DECIMALS)",
+      "example": "SHOWDECIMALS=1;",
+      "note": "Hvis mangler, brukes DECIMALS"
+    },
+    
+    "SOURCE": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Ansvarlig organisasjon",
+      "example": "SOURCE=\"Statistics Norway\";",
+      "note": "Vises i fotnote"
+    },
+    
+    "STOCKFA": {
+      "type": "enum",
+      "allowed_values": ["S", "F", "A"],
+      "multiline": false,
+      "subkey": "contvariable_value",
+      "description": "Beholdning (S), strøm (F) eller gjennomsnitt (A)",
+      "example": "STOCKFA=\"S\";",
+      "note": "S=stock, F=flow, A=average"
+    },
+    
+    "SURVEY": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "language_dependent": true,
+      "description": "Undersøkelsesnavn",
+      "example": "SURVEY=\"Labour Force Survey\";",
+      "note": "Kan vises i PX-Web"
+    },
+    
+    "SYNONYMS": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "description": "Synonymer for søk",
+      "example": "SYNONYMS=\"CPI\",\"Inflation\";",
+      "note": "For søkefunksjon i PX-Web"
+    },
+    
+    "TABLEID": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "description": "Unik tabell-ID",
+      "example": "TABLEID=\"TAB_12345\";",
+      "note": "Identifikator for tabellen"
+    },
+    
+    "TIMEVAL": {
+      "type": "complex",
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Tidsserie-spesifikasjon (A1=år, M1=måned, etc.)",
+      "example": "TIMEVAL(\"year\")=TLIST(A1),\"2020\",\"2021\",\"2022\";",
+      "note": "A1=år, H1=halvår, Q1=kvartal, M1=måned, W1=uke"
+    },
+    
+    "UPDATE-FREQUENCY": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "description": "Oppdateringsfrekvens",
+      "example": "UPDATE-FREQUENCY=\"Annual\";",
+      "note": "Leses/lagres, ikke vist"
+    },
+    
+    "VALUENOTE": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_and_value",
+      "description": "Valgfri fotnote for spesifikk verdi",
+      "example": "VALUENOTE(\"region\",\"Oslo\")=\"Capital city\";",
+      "note": "Vises ved forespørsel"
+    },
+    
+    "VALUENOTEX": {
+      "type": "text",
+      "max_length": 256,
+      "per_line": true,
+      "multiline": true,
+      "language_dependent": true,
+      "subkey": "variable_and_value",
+      "description": "Obligatorisk fotnote for verdi",
+      "example": "VALUENOTEX(\"year\",\"2025\")=\"Preliminary\";",
+      "note": "Vises automatisk"
+    },
+    
+    "VARIABLE-TYPE": {
+      "type": "text",
+      "max_length": 256,
+      "multiline": true,
+      "subkey": "variable_name",
+      "description": "Variabeltype",
+      "example": "VARIABLE-TYPE(\"region\")=\"Geographic\";",
+      "note": "Leses/lagres, ikke brukt"
+    }
+  },
+  
+  "recommended_order": [
+    "CHARSET",
+    "AXIS-VERSION",
+    "CODEPAGE",
+    "LANGUAGE",
+    "LANGUAGES",
+    "CREATION-DATE",
+    "NEXT-UPDATE",
+    "PX-SERVER",
+    "DIRECTORY-PATH",
+    "UPDATE-FREQUENCY",
+    "TABLEID",
+    "SYNONYMS",
+    "DEFAULT-GRAPH",
+    "DECIMALS",
+    "SHOWDECIMALS",
+    "ROUNDING",
+    "MATRIX",
+    "AGGREGALLOWED",
+    "AUTOPEN",
+    "SUBJECT-CODE",
+    "SUBJECT-AREA",
+    "CONFIDENTIAL",
+    "COPYRIGHT",
+    "DESCRIPTION",
+    "TITLE",
+    "DESCRIPTIONDEFAULT",
+    "CONTENTS",
+    "UNITS",
+    "STUB",
+    "HEADING",
+    "CONTVARIABLE",
+    "VALUES",
+    "TIMEVAL",
+    "CODES",
+    "DOUBLECOLUMN",
+    "PRESTEXT",
+    "DOMAIN",
+    "VARIABLE-TYPE",
+    "HIERARCHIES",
+    "HIERARCHYLEVELS",
+    "HIERARCHYLEVELSOPEN",
+    "HIERARCHYNAMES",
+    "MAP",
+    "PARTITIONED",
+    "ELIMINATION",
+    "PRECISION",
+    "LAST-UPDATED",
+    "STOCKFA",
+    "CFPRICES",
+    "DAYADJ",
+    "SEASADJ",
+    "CONTACT",
+    "REFPERIOD",
+    "BASEPERIOD",
+    "DATABASE",
+    "SOURCE",
+    "SURVEY",
+    "LINK",
+    "INFOFILE",
+    "FIRST-PUBLISHED",
+    "META-ID",
+    "OFFICIAL-STATISTICS",
+    "INFO",
+    "NOTEX",
+    "NOTE",
+    "VALUENOTEX",
+    "VALUENOTE",
+    "CELLNOTEX",
+    "CELLNOTE",
+    "DATASYMBOL1",
+    "DATASYMBOL2",
+    "DATASYMBOL3",
+    "DATASYMBOL4",
+    "DATASYMBOL5",
+    "DATASYMBOL6",
+    "DATASYMBOLSUM",
+    "DATASYMBOLNIL",
+    "DATANOTECELL",
+    "DATANOTESUM",
+    "DATANOTE",
+    "KEYS",
+    "ATTRIBUTE-ID",
+    "ATTRIBUTE-TEXT",
+    "ATTRIBUTES",
+    "PRECISION",
+    "DATA"
+  ],
+  
+  "notes": {
+    "language_dependent_keywords": "Keywords med language_dependent=true kan ha [language] suffix, f.eks. CONTENTS[\"en\"]",
+    "subkey_format": "Subkey skrives i parenteser, f.eks. VALUES(\"region\")",
+    "multivalue_format": "Flere verdier skilles med komma og anførselstegn: \"value1\",\"value2\"",
+    "termination": "Alle keywords avsluttes med semikolon ;",
+    "data_delimiter": "DATA-seksjonen kan bruke space, comma, semicolon eller tab som separator"
+  }
+}

@@ -55,6 +55,14 @@ class CodelistManager:
             geo_keywords_in_source = any(word in source_col.lower() for word in ['bydel', 'krets', 'geo', 'område'])
             geo_keywords_in_target = any(word in target_col.lower() for word in ['bydel', 'krets', 'geo', 'område', 'bosted', 'arbeidssted'])
             
+            # Spesiell håndtering for TKNR: MÅ matche source-pattern
+            is_tknr_codelist = 'tknr' in name.lower()
+            source_matches_tknr = 'tknr' in source_col.lower()
+            
+            if is_tknr_codelist and not source_matches_tknr:
+                # Skip TKNR-kodelister hvis source-kolonnen ikke inneholder 'tknr'
+                continue
+            
             for pattern in source_patterns:
                 if re.search(pattern, source_col, re.IGNORECASE):
                     score += 2
@@ -71,33 +79,58 @@ class CodelistManager:
                 column_name_match = True
                 score += 1  # Bonus for geografisk hint
             
-            # For geografiske kodelister: KREV kolonnenavn-match
+            # For geografiske kodelister (ikke TKNR): KREV kolonnenavn-match
             # Dette forhindrer at "kjoenn" matcher "geo_bydel" bare pga. tallverdier
-            if is_geo_codelist and not column_name_match:
+            if is_geo_codelist and not column_name_match and not is_tknr_codelist:
                 continue  # Skip denne kodelisten hvis kolonnenavn ikke matcher
             
             # Sjekk overlap i faktiske verdier
             mappings = codelist.get('mappings', {})
             if mappings:
-                mapping_keys = set(str(k) for k in mappings.keys())
-                
-                # Sammenlign med source_values
-                source_overlap = len(mapping_keys & source_values)
-                if source_overlap > 0:
-                    overlap_ratio = source_overlap / len(source_values) if source_values else 0
-                    score += overlap_ratio * 10
-                
-                # Sjekk om mapping-verdiene finnes i target
-                if isinstance(list(mappings.values())[0], dict):
-                    # Format: {"code": "...", "name": "..."}
-                    mapping_codes = set(str(v.get('code', v)) for v in mappings.values())
+                # Håndter nested mappings (f.eks. NAV_TKNR med tknr_to_px, tknr_to_ssb)
+                first_value = list(mappings.values())[0] if mappings else None
+                if isinstance(first_value, dict) and all(isinstance(v, dict) for v in mappings.values()):
+                    # Nested structure - sjekk første sub-mapping
+                    for sub_name, sub_mapping in mappings.items():
+                        mapping_keys = set(str(k) for k in sub_mapping.keys())
+                        mapping_values = set(str(v) for v in sub_mapping.values())
+                        
+                        # Sammenlign med source_values
+                        source_overlap = len(mapping_keys & source_values)
+                        if source_overlap > 0:
+                            overlap_ratio = source_overlap / len(source_values) if source_values else 0
+                            score += overlap_ratio * 10
+                        
+                        # Sjekk om mapping-verdiene finnes i target
+                        target_overlap = len(mapping_values & target_values)
+                        if target_overlap > 0:
+                            overlap_ratio = target_overlap / len(target_values) if target_values else 0
+                            score += overlap_ratio * 10
+                        
+                        # Vi har funnet match, stopp iterering
+                        if source_overlap > 0 or target_overlap > 0:
+                            break
                 else:
-                    mapping_codes = set(str(v) for v in mappings.values())
-                
-                target_overlap = len(mapping_codes & target_values)
-                if target_overlap > 0:
-                    overlap_ratio = target_overlap / len(target_values) if target_values else 0
-                    score += overlap_ratio * 10
+                    # Flat structure
+                    mapping_keys = set(str(k) for k in mappings.keys())
+                    
+                    # Sammenlign med source_values
+                    source_overlap = len(mapping_keys & source_values)
+                    if source_overlap > 0:
+                        overlap_ratio = source_overlap / len(source_values) if source_values else 0
+                        score += overlap_ratio * 10
+                    
+                    # Sjekk om mapping-verdiene finnes i target
+                    if isinstance(list(mappings.values())[0], dict):
+                        # Format: {"code": "...", "name": "..."}
+                        mapping_codes = set(str(v.get('code', v)) for v in mappings.values())
+                    else:
+                        mapping_codes = set(str(v) for v in mappings.values())
+                    
+                    target_overlap = len(mapping_codes & target_values)
+                    if target_overlap > 0:
+                        overlap_ratio = target_overlap / len(target_values) if target_values else 0
+                        score += overlap_ratio * 10
             
             if score > best_score and score > 5:  # Minimum terskel
                 best_score = score

@@ -1573,21 +1573,41 @@ def transform_data('''
         
         # Kodeliste-transformasjoner (på originale kolonnenavn!)
         for in_col, trans_info in transformations.items():
-            if in_col.lower() not in [k.lower() for k in mappings.keys()]:
-                # Skip hvis kolonne ikke ble mappet
-                continue
-                
             codelist_name = trans_info['codelist']
             target_col = trans_info['target_col']
             
-            # Verifiser at kodeliste-navnet er riktig format
-            if not codelist_name.startswith('SSB_til_PX') and not codelist_name.startswith('NAV_TKNR'):
+            # Verifiser at kodeliste-navnet er riktig format (case-insensitive)
+            codelist_lower = codelist_name.lower()
+            if not codelist_lower.startswith('ssb_til_px') and not codelist_lower.startswith('nav_tknr'):
                 # Skip kodelister med feil navn (f.eks. 'geo_bydel')
                 continue
             
             # Bruk ORIGINAL kolonnenavn i transformasjonen
             in_col_lower = in_col.lower()
-            script += f'''    # Transformer '{in_col_lower}' med kodeliste {codelist_name}
+            
+            # Spesialhåndtering for NAV_TKNR (krever to output-kolonner)
+            if codelist_lower.startswith('nav_tknr'):
+                script += f'''    # TKNR-mapping fra kodeliste {codelist_name}
+    if '{codelist_name}' in codelists:
+        tknr_to_ssb = {{int(k): int(v) for k, v in codelists['{codelist_name}']['mappings']['tknr_to_ssb'].items()}}
+        tknr_to_px = codelists['{codelist_name}']['mappings']['tknr_to_px']
+        labels = codelists['{codelist_name}']['labels']
+        
+        # Bygg label-mapping: TKNR → bydelsnavn
+        tknr_to_label = {{int(tknr): labels[px_code] for tknr, px_code in tknr_to_px.items()}}
+        
+        # Opprett to kolonner: geografi (SSB 5-sifret) og geografi_ (navn)
+        # Finn output-kolonnenavn fra mapping
+        # TODO: Oppdater med faktiske output-kolonnenavn fra mappings
+        df{i}_transformed['geografi'] = df{i}_transformed['{in_col_lower}'].map(tknr_to_ssb)
+        df{i}_transformed['geografi_'] = df{i}_transformed['{in_col_lower}'].map(tknr_to_label)
+    else:
+        print("⚠️  Kunne ikke mappe TKNR - kodeliste mangler")
+    
+'''
+            else:
+                # Vanlig kodeliste-transformasjon
+                script += f'''    # Transformer '{in_col_lower}' med kodeliste {codelist_name}
     if '{codelist_name}' in codelists:
         codelist = codelists['{codelist_name}']
         mapping = codelist.get('mappings', {{}})

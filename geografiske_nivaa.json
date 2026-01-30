@@ -1,0 +1,177 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-01-09",
+  "description": "Geografiske inndelinger for Oslo kommune statistikk med input/output-mapping",
+  "source": "https://www.oslo.kommune.no/statistikk/geografiske-inndelinger/",
+  
+  "geographic_levels": {
+    "bydel": {
+      "input_code": "BYDEL",
+      "output_code": "BYDEL",
+      "name": "Bydel",
+      "count": "15 bydeler + Sentrum + Marka",
+      "description": "Administrativ inndeling. Hver bydel har eget folkevalgt organ (Bydelsutvalg).",
+      "hierarchy_level": 1,
+      "px_domain": "GEO_BYDEL",
+      "typical_use": "Mest vanlig geografisk inndeling for Oslo-statistikk"
+    },
+    
+    "delbydel": {
+      "input_code": "DELBYDEL",
+      "output_code": "DELBYDEL",
+      "name": "Delbydel",
+      "count": "98 delbydeler (inkl. Sentrum og Marka)",
+      "description": "Statistisk inndeling under bydel. Hver bydel har 5-9 delbydeler.",
+      "hierarchy_level": 2,
+      "established": "2007, revidert 2017",
+      "px_domain": "GEO_DELBYDEL",
+      "typical_use": "Detaljert statistikk på bydels-undernivå"
+    },
+    
+    "grunnkretsomraade": {
+      "input_code": "GRUNNKRETSOMRAADE",
+      "output_code": "GRUNNKRETSOMRAADE",
+      "name": "Grunnkretsområde",
+      "count": "338 grunnkretsområder",
+      "description": "Består av 1-5 grunnkretser med minimum 1300-1500 personer. Geografisk nivå mellom delbydel og grunnkrets.",
+      "hierarchy_level": 3,
+      "established": "2023",
+      "px_domain": "GEO_GRUNNKRETSOMRAADE",
+      "typical_use": "Lavere enn delbydel, men med godt statistikktilfang"
+    },
+    
+    "grunnkrets": {
+      "input_code": "GRUNNKRETS",
+      "output_code": "GRUNNKRETS",
+      "name": "Grunnkrets",
+      "count": "592 grunnkretser",
+      "description": "Laveste geografiske enhet for statistiske formål. Kan sammenstilles til delbydeler, grunnkretsområder og bydeler.",
+      "hierarchy_level": 4,
+      "established": "Sist revidert 2017",
+      "px_domain": "GEO_GRUNNKRETS",
+      "typical_use": "Fineste geografiske nivå for statistiske formål"
+    },
+    
+    "nav_tknr": {
+      "input_code": "NAV_TKNR",
+      "output_code": "BYDEL",
+      "name": "NAV trygdekontor",
+      "count": "16 TKNR-koder (301 + 15 bydeler)",
+      "description": "NAV trygdekontor-koder som mappes til bydel via kodeliste.",
+      "hierarchy_level": null,
+      "px_domain": "GEO_BYDEL",
+      "codelist_required": "NAV_TKNR_til_PX",
+      "mapping_note": "Input TKNR → Output Bydel via kodeliste",
+      "typical_use": "NAV-tabeller (trygd, sosialhjelp, arbeidsmarked)"
+    },
+    
+    "indre_ytre_by": {
+      "input_code": "INDRE_YTRE_BY",
+      "output_code": "INDRE_YTRE_BY",
+      "name": "Indre og ytre by",
+      "count": "5 områder",
+      "description": "Femdeling av Oslo basert på bydelsinndelingen.",
+      "hierarchy_level": null,
+      "px_domain": null,
+      "areas": [
+        "Indre by øst (Gamle Oslo, Grünerløkka, Sagene)",
+        "Indre by vest (St. Hanshaugen, Frogner)",
+        "Ytre by vest (Ullern, Vestre Aker, Nordre Aker)",
+        "Ytre by øst (Bjerke, Grorud, Stovner, Alna)",
+        "Ytre by sør (Østensjø, Nordstrand, Søndre Nordstrand)"
+      ],
+      "typical_use": "Forenklet inndeling for overordnet sammenligning"
+    },
+    
+    "menighet": {
+      "input_code": "MENIGHET",
+      "output_code": "MENIGHET",
+      "name": "Menighet",
+      "count": "38 menigheter (sokn) i 5 prostier",
+      "description": "Kirkens inndeling av Oslo.",
+      "hierarchy_level": null,
+      "established": "Vedtatt 1.1.2015",
+      "px_domain": null,
+      "typical_use": "Kirkestatistikk og demografiske analyser knyttet til menighetsgrenser"
+    },
+    
+    "skoleinntaksomraade": {
+      "input_code": "SKOLEINNTAKSOMRAADE",
+      "output_code": "SKOLEINNTAKSOMRAADE",
+      "name": "Skoleinntaksområde",
+      "count": "107 skoleinntaksområder",
+      "description": "Veiledende inntaksområder for ordinære grunnskoler i Oslo. Revideres årlig.",
+      "hierarchy_level": null,
+      "px_domain": null,
+      "typical_use": "Skolestatistikk, elevtall, skolekapasitet"
+    },
+    
+    "stemmekrets": {
+      "input_code": "STEMMEKRETS",
+      "output_code": "STEMMEKRETS",
+      "name": "Stemmekrets",
+      "count": "100 stemmekretser",
+      "description": "Inndeling for kommunestyrevalg og stortingsvalg.",
+      "hierarchy_level": null,
+      "px_domain": null,
+      "typical_use": "Valgstatistikk"
+    },
+    
+    "annet": {
+      "input_code": "ANNET",
+      "output_code": "ANNET",
+      "name": "Annet/ikke aktuelt",
+      "count": null,
+      "description": "Brukes når statistikken ikke følger standard geografisk inndeling, eller når geografi ikke er relevant.",
+      "hierarchy_level": null,
+      "px_domain": null,
+      "typical_use": "Ikke-geografisk statistikk eller spesielle inndelinger"
+    }
+  },
+  
+  "px_aggregation_domains": {
+    "description": "PX DOMAIN-koder for aggregeringssett",
+    "note": "Legg til faktiske DOMAIN-koder her når du har listen",
+    "domains": {
+      "GEO_BYDEL": {
+        "name": "Aggregeringssett for bydel-nivå",
+        "levels": ["bydel", "kommune"]
+      },
+      "GEO_DELBYDEL": {
+        "name": "Aggregeringssett for delbydel-nivå",
+        "levels": ["delbydel", "bydel", "kommune"]
+      },
+      "GEO_GRUNNKRETSOMRAADE": {
+        "name": "Aggregeringssett for grunnkretsområde",
+        "levels": ["grunnkretsomraade", "delbydel", "bydel", "kommune"]
+      },
+      "GEO_GRUNNKRETS": {
+        "name": "Aggregeringssett for grunnkrets",
+        "levels": ["grunnkrets", "grunnkretsomraade", "delbydel", "bydel", "kommune"]
+      }
+    }
+  },
+  
+  "usage_examples": {
+    "same_input_output": {
+      "description": "Input og output er samme nivå - ingen kodeliste-mapping nødvendig",
+      "example": {
+        "input_code": "BYDEL",
+        "output_code": "BYDEL",
+        "px_domain": "GEO_BYDEL",
+        "codelist": null
+      }
+    },
+    "mapping_required": {
+      "description": "Input og output er ulike - kodeliste-mapping nødvendig",
+      "example": {
+        "input_code": "NAV_TKNR",
+        "output_code": "BYDEL",
+        "px_domain": "GEO_BYDEL",
+        "codelist": "NAV_TKNR_til_PX"
+      }
+    }
+  },
+  
+  "usage_note": "Angi både input_code (nivå i rådata) og output_code (ønsket nivå i tabell). Hvis forskjellige, kreves kodeliste-mapping. PX DOMAIN angir hvilket aggregeringssett som skal brukes."
+}
